@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>¡Hola Mundo! — P1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+
+  <main class="container">
+    <div class="card" id="card">
+      <div class="badge">
+        <span class="status-dot"></span>
+        Proyecto P1 • v1.0
+      </div>
+
+      <h1 class="title">
+        ¡Hola, <span class="gradient-text">Mundo</span>! 👋
+      </h1>
+
+      <p class="subtitle">
+        El viaje de cada gran desarrollador comienza con una simple línea de código. 
+        Bienvenido al inicio de tu nuevo proyecto.
+      </p>
+
+      <div class="code-box">
+        <div class="code-header">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="filename">inicio.js</span>
+        </div>
+        <pre><code><span class="keyword">const</span> <span class="var">proyecto</span> = <span class="string">"P1"</span>;
+<span class="func">console</span>.<span class="func">log</span>(<span class="string">"¡Hola Mundo! 🚀 Listo para crear cosas geniales."</span>);</code></pre>
+      </div>
+
+      <div class="actions">
+        <button id="btn-saludo" class="primary-btn">
+          <span>¡Saludar de nuevo!</span> ✨
+        </button>
+        <button id="btn-toggle-color" class="secondary-btn">
+          Cambiar Tema 🎨
+        </button>
+      </div>
+
+      <div id="counter" class="counter-text">
+        Has interactuado <span id="click-count">0</span> veces
+      </div>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
