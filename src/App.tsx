@@ -8,7 +8,9 @@ import {
   LogIn,
   LogOut,
   Image,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import type { DiagramNode, NodeType } from './types/ftth';
 import { calculateOpticalPowers } from './utils/opticalBudget';
@@ -109,7 +111,7 @@ const initialNetworkTopology: DiagramNode = {
 };
 
 export function App() {
-  const [network, setNetwork] = useState<DiagramNode>(() => calculateOpticalPowers(initialNetworkTopology));
+  const [network, setNetwork] = useState<DiagramNode | null>(() => calculateOpticalPowers(initialNetworkTopology));
   const [selectedNode, setSelectedNode] = useState<DiagramNode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMufaModal, setActiveMufaModal] = useState<DiagramNode | null>(null);
@@ -157,7 +159,12 @@ export function App() {
     };
   };
 
-  const handleNetworkChange = (newTree: DiagramNode) => {
+  const handleNetworkChange = (newTree: DiagramNode | null) => {
+    if (!newTree) {
+      setNetwork(null);
+      setSelectedNode(null);
+      return;
+    }
     const calculated = calculateOpticalPowers(newTree);
     setNetwork(calculated);
 
@@ -189,7 +196,35 @@ export function App() {
     }
   };
 
+  // Botón para borrar todo el lienzo en blanco
+  const handleClearAll = () => {
+    const confirmClear = window.confirm("¿Estás seguro de que deseas borrar todo el lienzo? Se eliminarán todos los elementos.");
+    if (confirmClear) {
+      handleNetworkChange(null);
+    }
+  };
+
+  // Restaurar topología demo inicial
+  const handleResetDemo = () => {
+    handleNetworkChange(calculateOpticalPowers(initialNetworkTopology));
+  };
+
+  // Crear nodo raíz si el lienzo está en blanco
+  const handleCreateRoot = () => {
+    const newRoot: DiagramNode = {
+      id: 'olt-root',
+      name: 'OLT Central',
+      type: 'olt',
+      power: 5.0,
+      position: { x: 300, y: 300 },
+      cableFibers: 48,
+      children: []
+    };
+    handleNetworkChange(newRoot);
+  };
+
   const handleToggleCollapse = (id: string) => {
+    if (!network) return;
     const updated = updateNodeInTree(network, id, node => ({
       ...node,
       isCollapsed: !node.isCollapsed,
@@ -198,6 +233,7 @@ export function App() {
   };
 
   const handleUpdatePosition = (id: string, pos: { x: number; y: number }) => {
+    if (!network) return;
     const updated = updateNodeInTree(network, id, node => ({
       ...node,
       position: pos,
@@ -206,6 +242,7 @@ export function App() {
   };
 
   const handleAddChild = (parentNode: DiagramNode, type: NodeType) => {
+    if (!network) return;
     const newId = `${type}-${Date.now().toString().slice(-4)}`;
     const offset = (parentNode.children?.length || 0) * 110;
     const parentPos = parentNode.position || { x: 300, y: 300 };
@@ -231,13 +268,18 @@ export function App() {
   };
 
   const handleAddQuickNode = (type: NodeType) => {
+    if (!network) {
+      handleCreateRoot();
+      return;
+    }
     const target = selectedNode || network;
     handleAddChild(target, type);
   };
 
   const handleDeleteNode = (id: string) => {
+    if (!network) return;
     if (id === network.id) {
-      alert("No puedes eliminar el nodo raíz de la OLT.");
+      handleClearAll();
       return;
     }
     const updated = removeNodeFromTree(network, id);
@@ -246,7 +288,7 @@ export function App() {
   };
 
   const handleUpdateSelectedProps = (partial: Partial<DiagramNode>) => {
-    if (!selectedNode) return;
+    if (!selectedNode || !network) return;
     const updated = updateNodeInTree(network, selectedNode.id, node => ({
       ...node,
       ...partial,
@@ -255,6 +297,10 @@ export function App() {
   };
 
   const handleExportJSON = () => {
+    if (!network) {
+      alert("No hay elementos en el diagrama para exportar.");
+      return;
+    }
     const jsonStr = JSON.stringify(network, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -342,6 +388,28 @@ export function App() {
 
           <div className="h-5 w-[1px] bg-slate-800" />
 
+          {/* Botón Borrar Todo el Lienzo */}
+          <button
+            onClick={handleClearAll}
+            className="px-3 py-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-xs font-semibold text-red-300 hover:text-red-100 flex items-center gap-1.5 transition shadow-sm"
+            title="Borrar todos los elementos y dejar el lienzo en blanco"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Borrar Lienzo</span>
+          </button>
+
+          {/* Botón Cargar Demo */}
+          <button
+            onClick={handleResetDemo}
+            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition"
+            title="Restaurar topología de demostración"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Cargar Demo</span>
+          </button>
+
+          <div className="h-5 w-[1px] bg-slate-800" />
+
           <label
             className="cursor-pointer px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition"
             title="Importar archivo JSON"
@@ -413,6 +481,7 @@ export function App() {
             onAddChild={handleAddChild}
             onDeleteNode={handleDeleteNode}
             onUpdatePosition={handleUpdatePosition}
+            onCreateRoot={handleCreateRoot}
           />
         </main>
       </div>
@@ -422,6 +491,7 @@ export function App() {
           node={activeMufaModal}
           onClose={() => setActiveMufaModal(null)}
           onUpdate={(updated) => {
+            if (!network) return;
             const newTree = updateNodeInTree(network, updated.id, () => updated);
             handleNetworkChange(newTree);
           }}

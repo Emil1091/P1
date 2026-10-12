@@ -10,7 +10,7 @@ import type { DiagramNode, NodeType, SplitterRatio } from '../types/ftth';
 import { evaluatePowerLevel } from '../utils/opticalBudget';
 
 interface SidebarProps {
-  root: DiagramNode;
+  root: DiagramNode | null;
   selectedNode: DiagramNode | null;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -123,7 +123,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
           Árbol de Nodos
         </span>
-        {renderTreeItem(root)}
+        {root ? (
+          renderTreeItem(root)
+        ) : (
+          <p className="text-xs text-slate-500 italic p-3 text-center">
+            No hay nodos en el diagrama.
+          </p>
+        )}
       </div>
 
       <div className="border-t border-slate-800/80 bg-slate-900/50 p-4 space-y-3">

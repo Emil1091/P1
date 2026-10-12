@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, PlusCircle } from 'lucide-react';
 import type { DiagramNode, NodeType } from '../types/ftth';
 import { CanvasNode } from './CanvasNode';
 
 interface TopologyCanvasProps {
-  root: DiagramNode;
+  root: DiagramNode | null;
   selectedNode: DiagramNode | null;
   onSelectNode: (node: DiagramNode) => void;
   onToggleCollapse: (id: string) => void;
@@ -12,6 +12,7 @@ interface TopologyCanvasProps {
   onAddChild: (parentNode: DiagramNode, type: NodeType) => void;
   onDeleteNode: (id: string) => void;
   onUpdatePosition: (id: string, pos: { x: number; y: number }) => void;
+  onCreateRoot?: () => void;
 }
 
 export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
@@ -23,6 +24,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   onAddChild,
   onDeleteNode,
   onUpdatePosition,
+  onCreateRoot,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +49,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return list;
   };
 
-  const visibleNodes = flattenNodes(root);
+  const visibleNodes = root ? flattenNodes(root) : [];
 
   // Generar conexiones entre padres e hijos
   interface LinkInfo {
@@ -77,7 +79,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     }
   };
 
-  extractLinks(root);
+  if (root) {
+    extractLinks(root);
+  }
 
   // Manejo de Pan
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -160,6 +164,26 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </defs>
         <rect width="100%" height="100%" fill="url(#grid-pattern)" />
       </svg>
+
+      {/* Mensaje de lienzo vacío */}
+      {!root && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+          <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 text-center max-w-sm pointer-events-auto backdrop-blur-md shadow-2xl">
+            <h3 className="text-base font-bold text-slate-100 mb-1.5">Lienzo en blanco</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Has borrado todos los elementos. Agrega un nodo raíz de OLT o carga un nuevo proyecto para comenzar.
+            </p>
+            {onCreateRoot && (
+              <button
+                onClick={onCreateRoot}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white inline-flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/30"
+              >
+                <PlusCircle className="w-4 h-4" /> Crear OLT Central
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div
         style={{
