@@ -8,25 +8,42 @@ import {
   ChevronRight,
   ChevronDown,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Edit2,
+  MapPin
 } from 'lucide-react';
-import type { FTTHNode, PONPort, SplitterRatio } from '../types/ftth';
+import type { FTTHNode, PONPort, SplitterRatio, BreadcrumbStep } from '../types/ftth';
 import { CurlyBracket } from './CurlyBracket';
 
 interface SynopticTreeCanvasProps {
   pon: PONPort;
+  oltName: string;
+  selectedBoxId: string | null;
+  onSelectBox: (boxId: string, steps: BreadcrumbStep[]) => void;
   onUpdatePrimaryBox: (updatedBox: FTTHNode | undefined) => void;
+  onOpenEditBoxModal: (node: FTTHNode) => void;
 }
 
 export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   pon,
+  oltName,
+  selectedBoxId,
+  onSelectBox,
   onUpdatePrimaryBox,
+  onOpenEditBoxModal,
 }) => {
   const primaryBox = pon.primaryBox;
 
-  // Refs para medir alturas dinámicas de las columnas y ajustar las llaves SVG exactamente
   const primaryBracketRef = useRef<HTMLDivElement>(null);
   const [primaryBracketHeight, setPrimaryBracketHeight] = useState(120);
+
+  // Selector de ratio para la nueva caja que se está por agregar
+  const [addingParentInfo, setAddingParentInfo] = useState<{
+    parentId: string;
+    parentType: 'pon' | 'primario' | 'secundario';
+    portIndex: number;
+  } | null>(null);
+  const [selectedRatio, setSelectedRatio] = useState<SplitterRatio>(4);
 
   // Toggle colapsar / minimizar caja
   const handleToggleCollapse = (nodeId: string) => {
@@ -45,7 +62,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
     onUpdatePrimaryBox(toggleRecursively(primaryBox));
   };
 
-  // Expandir todas o colapsar todas
   const handleCollapseAll = (collapse: boolean) => {
     if (!primaryBox) return;
     const setAll = (node: FTTHNode): FTTHNode => ({
@@ -56,80 +72,76 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
     onUpdatePrimaryBox(setAll(primaryBox));
   };
 
-  // Agregar caja primaria 1x4 si está vacío
-  const handleAddPrimary = (ratio: SplitterRatio = 4) => {
-    const newPrimary: FTTHNode = {
-      id: `pri-${Date.now().toString().slice(-4)}`,
-      name: `Caja Primaria 1x${ratio}`,
-      type: 'caja_primaria',
-      ratio,
-      isCollapsed: false,
-      children: [],
-    };
-    onUpdatePrimaryBox(newPrimary);
-  };
+  // Crear caja con el ratio elegido
+  const handleConfirmAddBox = () => {
+    if (!addingParentInfo) return;
 
-  // Agregar caja secundaria al puerto libre del primario
-  const handleAddSecondary = (primary: FTTHNode, portIndex: number, ratio: SplitterRatio = 4) => {
-    const newSecondary: FTTHNode = {
-      id: `sec-${Date.now().toString().slice(-4)}-${portIndex}`,
-      name: `Secundario #${portIndex} (1x${ratio})`,
-      type: 'caja_secundaria',
-      ratio,
-      parentPortIndex: portIndex,
-      isCollapsed: false,
-      children: [],
-    };
+    if (addingParentInfo.parentType === 'pon') {
+      const newPrimary: FTTHNode = {
+        id: `pri-${Date.now().toString().slice(-4)}`,
+        name: `Caja Primaria 1x${selectedRatio}`,
+        type: 'caja_primaria',
+        ratio: selectedRatio,
+        isCollapsed: false,
+        children: [],
+      };
+      onUpdatePrimaryBox(newPrimary);
+    } else if (addingParentInfo.parentType === 'primario' && primaryBox) {
+      const portNum = addingParentInfo.portIndex;
+      const newSecondary: FTTHNode = {
+        id: `sec-${Date.now().toString().slice(-4)}-${portNum}`,
+        name: `Secundario #${portNum} (1x${selectedRatio})`,
+        type: 'caja_secundaria',
+        ratio: selectedRatio,
+        parentPortIndex: portNum,
+        isCollapsed: false,
+        children: [],
+      };
 
-    const updatedChildren = [...(primary.children || [])];
-    const existingIdx = updatedChildren.findIndex(c => c.parentPortIndex === portIndex);
-    if (existingIdx >= 0) {
-      updatedChildren[existingIdx] = newSecondary;
-    } else {
-      updatedChildren.push(newSecondary);
+      const updatedChildren = [...(primaryBox.children || [])];
+      const existingIdx = updatedChildren.findIndex(c => c.parentPortIndex === portNum);
+      if (existingIdx >= 0) {
+        updatedChildren[existingIdx] = newSecondary;
+      } else {
+        updatedChildren.push(newSecondary);
+      }
+      onUpdatePrimaryBox({ ...primaryBox, children: updatedChildren });
+    } else if (addingParentInfo.parentType === 'secundario' && primaryBox) {
+      const secId = addingParentInfo.parentId;
+      const portNum = addingParentInfo.portIndex;
+      const newNap: FTTHNode = {
+        id: `nap-${Date.now().toString().slice(-4)}-${portNum}`,
+        name: `NAP #${portNum} (1x${selectedRatio})`,
+        type: 'caja_nap',
+        ratio: selectedRatio,
+        parentPortIndex: portNum,
+        isCollapsed: false,
+        children: [],
+      };
+
+      const updateChildrenRecursively = (node: FTTHNode): FTTHNode => {
+        if (node.id === secId) {
+          const updatedNaps = [...(node.children || [])];
+          const existingIdx = updatedNaps.findIndex(c => c.parentPortIndex === portNum);
+          if (existingIdx >= 0) {
+            updatedNaps[existingIdx] = newNap;
+          } else {
+            updatedNaps.push(newNap);
+          }
+          return { ...node, children: updatedNaps };
+        }
+        return {
+          ...node,
+          children: (node.children || []).map(updateChildrenRecursively),
+        };
+      };
+
+      onUpdatePrimaryBox(updateChildrenRecursively(primaryBox));
     }
 
-    onUpdatePrimaryBox({
-      ...primary,
-      children: updatedChildren,
-    });
+    setAddingParentInfo(null);
   };
 
-  // Agregar caja NAP al puerto libre del secundario
-  const handleAddNap = (secondaryId: string, portIndex: number, ratio: SplitterRatio = 8) => {
-    if (!primaryBox) return;
-
-    const newNap: FTTHNode = {
-      id: `nap-${Date.now().toString().slice(-4)}-${portIndex}`,
-      name: `NAP #${portIndex} (1x${ratio})`,
-      type: 'caja_nap',
-      ratio,
-      parentPortIndex: portIndex,
-      isCollapsed: false,
-      children: [],
-    };
-
-    const updateChildrenRecursively = (node: FTTHNode): FTTHNode => {
-      if (node.id === secondaryId) {
-        const updatedNaps = [...(node.children || [])];
-        const existingIdx = updatedNaps.findIndex(c => c.parentPortIndex === portIndex);
-        if (existingIdx >= 0) {
-          updatedNaps[existingIdx] = newNap;
-        } else {
-          updatedNaps.push(newNap);
-        }
-        return { ...node, children: updatedNaps };
-      }
-      return {
-        ...node,
-        children: (node.children || []).map(updateChildrenRecursively),
-      };
-    };
-
-    onUpdatePrimaryBox(updateChildrenRecursively(primaryBox));
-  };
-
-  // Eliminar cualquier caja del árbol
   const handleDeleteNode = (id: string) => {
     if (!primaryBox) return;
     if (primaryBox.id === id) {
@@ -149,7 +161,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
     onUpdatePrimaryBox(removeRecursively(primaryBox));
   };
 
-  // Medir la altura de los secundarios activos para que la llave del primario calce perfecto
   useEffect(() => {
     if (primaryBracketRef.current) {
       const h = primaryBracketRef.current.offsetHeight;
@@ -159,21 +170,19 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
 
   return (
     <div className="w-full h-full overflow-x-auto overflow-y-auto bg-[#0b0f19] p-6 select-none flex flex-col justify-start">
-      {/* Barra de título compacta */}
-      <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800/80">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
-            <Zap className="w-4 h-4" />
+      {/* Barra superior de controles */}
+      <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-800/80">
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400">
+            <Zap className="w-3.5 h-3.5" />
           </div>
           <div>
             <h2 className="text-xs font-bold text-slate-100 flex items-center gap-2">
-              <span>Cuadro Sinóptico de Llaves:</span>
+              <span>{oltName}</span>
+              <span className="text-slate-500">/</span>
               <span className="text-amber-400 font-mono">{pon.name}</span>
-              <span className="text-[10px] text-slate-500 font-mono">({pon.slotPort})</span>
+              <span className="text-[10px] text-slate-400 font-mono">({pon.slotPort})</span>
             </h2>
-            <p className="text-[10px] text-slate-400">
-              Esquema de derivación balanceada: PON ➔ Primario ➔ Secundarios ➔ NAPs
-            </p>
           </div>
         </div>
 
@@ -199,7 +208,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
 
       {/* ÁRBOL DE LLAVES SINÓPTICO */}
       <div className="flex items-center gap-1 min-w-max py-4">
-        {/* NIVEL 1: NODO PON (Idea General) */}
+        {/* NIVEL 1: NODO PON */}
         <div className="flex items-center gap-2">
           <div className="px-3 py-2 rounded-xl bg-slate-900 border border-amber-500/50 shadow-md flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400 flex-shrink-0" />
@@ -209,18 +218,47 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
             </div>
           </div>
 
-          {/* Llave del PON hacia la Caja Primaria */}
           {primaryBox ? (
             <CurlyBracket height={50} width={22} color="#f59e0b" strokeWidth={2.5} />
           ) : (
             <div className="flex items-center gap-2 pl-2">
               <span className="text-slate-600 text-xs">➔</span>
-              <button
-                onClick={() => handleAddPrimary(4)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition"
-              >
-                <Plus className="w-3.5 h-3.5" /> Agregar Caja Primaria (1x4)
-              </button>
+              {addingParentInfo?.parentType === 'pon' ? (
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-900 border border-indigo-500/50">
+                  <select
+                    value={selectedRatio}
+                    onChange={(e) => setSelectedRatio(Number(e.target.value) as SplitterRatio)}
+                    className="bg-slate-950 text-xs px-2 py-1 rounded text-slate-200 border border-slate-800 focus:outline-none"
+                  >
+                    <option value={2}>Splitter 1:2</option>
+                    <option value={4}>Splitter 1:4</option>
+                    <option value={8}>Splitter 1:8</option>
+                    <option value={16}>Splitter 1:16</option>
+                  </select>
+                  <button
+                    onClick={handleConfirmAddBox}
+                    className="px-2 py-1 text-[11px] font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white"
+                  >
+                    Crear Primario
+                  </button>
+                  <button
+                    onClick={() => setAddingParentInfo(null)}
+                    className="px-1.5 py-1 text-[11px] text-slate-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setSelectedRatio(4);
+                    setAddingParentInfo({ parentId: pon.id, parentType: 'pon', portIndex: 1 });
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Agregar Caja Primaria
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -228,10 +266,23 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
         {/* NIVEL 2: CAJA PRIMARIA */}
         {primaryBox && (
           <div className="flex items-center gap-1">
-            {/* Nodo Primario */}
-            <div className="px-3 py-2 rounded-xl bg-slate-900 border border-indigo-500/40 shadow-md flex items-center gap-2">
+            <div
+              onClick={() => {
+                onSelectBox(primaryBox.id, [
+                  { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, location: primaryBox.location }
+                ]);
+              }}
+              className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 cursor-pointer transition ${
+                selectedBoxId === primaryBox.id
+                  ? 'border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-950/20'
+                  : 'border-indigo-500/40 hover:border-indigo-400'
+              }`}
+            >
               <button
-                onClick={() => handleToggleCollapse(primaryBox.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleCollapse(primaryBox.id);
+                }}
                 className="text-slate-400 hover:text-white p-0.5 rounded transition"
                 title={primaryBox.isCollapsed ? 'Desplegar secundarias' : 'Minimizar secundarias'}
               >
@@ -244,18 +295,38 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
               <Split className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
               <div className="text-left">
                 <span className="text-xs font-bold text-slate-200 block truncate">{primaryBox.name}</span>
-                <span className="text-[9px] font-mono text-indigo-300 block">Splitter 1:{primaryBox.ratio || 4}</span>
+                <div className="flex items-center gap-1 text-[9px] font-mono text-indigo-300">
+                  <span>1:{primaryBox.ratio || 4}</span>
+                  {primaryBox.location && (
+                    <span className="text-slate-400 flex items-center gap-0.5 truncate max-w-[100px]">
+                      • <MapPin className="w-2.5 h-2.5 text-slate-500" /> {primaryBox.location}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
-                onClick={() => handleDeleteNode(primaryBox.id)}
-                className="text-slate-600 hover:text-red-400 p-0.5 ml-1 transition"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenEditBoxModal(primaryBox);
+                }}
+                className="text-slate-400 hover:text-sky-300 p-0.5 ml-1 transition"
+                title="Editar datos de la caja"
+              >
+                <Edit2 className="w-3 h-3" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteNode(primaryBox.id);
+                }}
+                className="text-slate-600 hover:text-red-400 p-0.5 ml-0.5 transition"
                 title="Eliminar primario"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
             </div>
 
-            {/* Llave del Primario hacia sus 4 Cajas Secundarias */}
+            {/* Llave hacia Secundarios */}
             {!primaryBox.isCollapsed && (
               <div className="flex items-center gap-1">
                 <CurlyBracket
@@ -265,7 +336,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                   strokeWidth={2.5}
                 />
 
-                {/* NIVEL 3: COLUMNA DE LAS 4 CAJAS SECUNDARIAS */}
+                {/* NIVEL 3: COLUMNA DE LAS CAJAS SECUNDARIAS */}
                 <div
                   ref={primaryBracketRef}
                   className="flex flex-col justify-around gap-3 py-1"
@@ -277,11 +348,25 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                     return (
                       <div key={`sec-slot-${portNum}`} className="flex items-center gap-1">
                         {secNode ? (
-                          // Caja Secundaria conectada
                           <div className="flex items-center gap-1">
-                            <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-sky-500/40 shadow-sm flex items-center gap-1.5">
+                            <div
+                              onClick={() => {
+                                onSelectBox(secNode.id, [
+                                  { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
+                                  { id: secNode.id, name: secNode.name, type: secNode.type, location: secNode.location }
+                                ]);
+                              }}
+                              className={`px-2.5 py-1.5 rounded-lg bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition ${
+                                selectedBoxId === secNode.id
+                                  ? 'border-sky-400 ring-2 ring-sky-500/30 bg-sky-950/20'
+                                  : 'border-sky-500/40 hover:border-sky-400'
+                              }`}
+                            >
                               <button
-                                onClick={() => handleToggleCollapse(secNode.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleCollapse(secNode.id);
+                                }}
                                 className="text-slate-400 hover:text-white p-0.5 rounded transition"
                                 title={secNode.isCollapsed ? 'Desplegar NAPs' : 'Minimizar NAPs'}
                               >
@@ -296,20 +381,38 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                 <span className="text-[11px] font-bold text-slate-200 block truncate">
                                   {secNode.name}
                                 </span>
-                                <span className="text-[9px] font-mono text-sky-300 block">
-                                  Salida #{portNum} • 1:{secNode.ratio || 4}
-                                </span>
+                                <div className="flex items-center gap-1 text-[9px] font-mono text-sky-300">
+                                  <span>Salida #{portNum} • 1:{secNode.ratio || 4}</span>
+                                  {secNode.location && (
+                                    <span className="text-slate-400 flex items-center gap-0.5 truncate max-w-[100px]">
+                                      • <MapPin className="w-2.5 h-2.5 text-slate-500" /> {secNode.location}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <button
-                                onClick={() => handleDeleteNode(secNode.id)}
-                                className="text-slate-600 hover:text-red-400 p-0.5 ml-1 transition"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenEditBoxModal(secNode);
+                                }}
+                                className="text-slate-400 hover:text-sky-300 p-0.5 ml-1 transition"
+                                title="Editar datos"
+                              >
+                                <Edit2 className="w-2.5 h-2.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteNode(secNode.id);
+                                }}
+                                className="text-slate-600 hover:text-red-400 p-0.5 ml-0.5 transition"
                                 title="Eliminar secundario"
                               >
                                 <Trash2 className="w-2.5 h-2.5" />
                               </button>
                             </div>
 
-                            {/* Llave del Secundario hacia sus Cajas NAP */}
+                            {/* Llave hacia NAPs */}
                             {!secNode.isCollapsed && (
                               <div className="flex items-center gap-1">
                                 <CurlyBracket
@@ -330,35 +433,94 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                     return (
                                       <div key={`nap-slot-${secNode.id}-${napPortNum}`} className="flex items-center gap-1">
                                         {napNode ? (
-                                          // Caja NAP Conectada (Ultra-compacta)
-                                          <div className="px-2 py-1 rounded-md bg-slate-900 border border-emerald-500/40 shadow-sm flex items-center gap-1.5">
+                                          <div
+                                            onClick={() => {
+                                              onSelectBox(napNode.id, [
+                                                { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
+                                                { id: secNode.id, name: secNode.name, type: secNode.type, portUsed: napPortNum, location: secNode.location },
+                                                { id: napNode.id, name: napNode.name, type: napNode.type, location: napNode.location }
+                                              ]);
+                                            }}
+                                            className={`px-2 py-1 rounded-md bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition ${
+                                              selectedBoxId === napNode.id
+                                                ? 'border-emerald-400 ring-2 ring-emerald-500/30 bg-emerald-950/20'
+                                                : 'border-emerald-500/40 hover:border-emerald-400'
+                                            }`}
+                                          >
                                             <Radio className="w-3 h-3 text-emerald-400 flex-shrink-0" />
                                             <div className="text-left">
-                                              <span className="text-[10px] font-bold text-slate-200 block">
+                                              <span className="text-[10px] font-bold text-slate-200 block truncate">
                                                 {napNode.name}
                                               </span>
-                                              <span className="text-[8px] font-mono text-emerald-400 block">
-                                                Salida #{napPortNum} • 1:{napNode.ratio || 8}
-                                              </span>
+                                              <div className="flex items-center gap-1 text-[8px] font-mono text-emerald-400">
+                                                <span>Salida #{napPortNum} • 1:{napNode.ratio || 8}</span>
+                                                {napNode.location && (
+                                                  <span className="text-slate-400 flex items-center gap-0.5 truncate max-w-[80px]">
+                                                    • {napNode.location}
+                                                  </span>
+                                                )}
+                                              </div>
                                             </div>
                                             <button
-                                              onClick={() => handleDeleteNode(napNode.id)}
-                                              className="text-slate-600 hover:text-red-400 p-0.5 ml-1 transition"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenEditBoxModal(napNode);
+                                              }}
+                                              className="text-slate-400 hover:text-emerald-300 p-0.5 ml-1 transition"
+                                              title="Editar NAP"
+                                            >
+                                              <Edit2 className="w-2.5 h-2.5" />
+                                            </button>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteNode(napNode.id);
+                                              }}
+                                              className="text-slate-600 hover:text-red-400 p-0.5 ml-0.5 transition"
                                               title="Eliminar NAP"
                                             >
                                               <Trash2 className="w-2.5 h-2.5" />
                                             </button>
                                           </div>
                                         ) : (
-                                          // Ranura libre para agregar NAP
-                                          <button
-                                            onClick={() => handleAddNap(secNode.id, napPortNum, 8)}
-                                            className="px-2 py-1 rounded border border-dashed border-slate-800 hover:border-emerald-500/50 bg-slate-950/60 hover:bg-slate-900 text-[10px] text-slate-400 hover:text-emerald-300 flex items-center gap-1 transition"
-                                            title={`Agregar Caja NAP a la salida #${napPortNum}`}
-                                          >
-                                            <Plus className="w-2.5 h-2.5" />
-                                            <span>Salida #{napPortNum}: + NAP (1x8)</span>
-                                          </button>
+                                          // Ranura libre con selector de ratio
+                                          addingParentInfo?.parentId === secNode.id && addingParentInfo.portIndex === napPortNum ? (
+                                            <div className="flex items-center gap-1 p-0.5 rounded bg-slate-900 border border-emerald-500/50 text-[10px]">
+                                              <select
+                                                value={selectedRatio}
+                                                onChange={(e) => setSelectedRatio(Number(e.target.value) as SplitterRatio)}
+                                                className="bg-slate-950 px-1 py-0.5 rounded text-slate-200 border border-slate-800"
+                                              >
+                                                <option value={4}>1:4</option>
+                                                <option value={8}>1:8</option>
+                                                <option value={16}>1:16</option>
+                                              </select>
+                                              <button
+                                                onClick={handleConfirmAddBox}
+                                                className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold"
+                                              >
+                                                +
+                                              </button>
+                                              <button
+                                                onClick={() => setAddingParentInfo(null)}
+                                                className="px-1 text-slate-400 hover:text-white"
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => {
+                                                setSelectedRatio(8);
+                                                setAddingParentInfo({ parentId: secNode.id, parentType: 'secundario', portIndex: napPortNum });
+                                              }}
+                                              className="px-2 py-1 rounded border border-dashed border-slate-800 hover:border-emerald-500/50 bg-slate-950/60 hover:bg-slate-900 text-[10px] text-slate-400 hover:text-emerald-300 flex items-center gap-1 transition"
+                                              title={`Agregar Caja NAP a la salida #${napPortNum}`}
+                                            >
+                                              <Plus className="w-2.5 h-2.5" />
+                                              <span>Salida #{napPortNum}: + NAP</span>
+                                            </button>
+                                          )
                                         )}
                                       </div>
                                     );
@@ -368,15 +530,44 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                             )}
                           </div>
                         ) : (
-                          // Ranura libre para agregar Secundario
-                          <button
-                            onClick={() => handleAddSecondary(primaryBox, portNum, 4)}
-                            className="px-2.5 py-1.5 rounded-lg border border-dashed border-slate-800 hover:border-sky-500/50 bg-slate-950/60 hover:bg-slate-900 text-xs text-slate-400 hover:text-sky-300 flex items-center gap-1.5 transition"
-                            title={`Agregar Caja Secundaria a la salida #${portNum}`}
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>Salida #{portNum}: + Secundario (1x4)</span>
-                          </button>
+                          // Ranura secundaria libre con selector de ratio
+                          addingParentInfo?.parentId === primaryBox.id && addingParentInfo.portIndex === portNum ? (
+                            <div className="flex items-center gap-1 p-1 rounded bg-slate-900 border border-sky-500/50 text-xs">
+                              <select
+                                value={selectedRatio}
+                                onChange={(e) => setSelectedRatio(Number(e.target.value) as SplitterRatio)}
+                                className="bg-slate-950 px-1.5 py-0.5 rounded text-slate-200 border border-slate-800"
+                              >
+                                <option value={2}>1:2</option>
+                                <option value={4}>1:4</option>
+                                <option value={8}>1:8</option>
+                              </select>
+                              <button
+                                onClick={handleConfirmAddBox}
+                                className="px-2 py-0.5 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs"
+                              >
+                                Crear
+                              </button>
+                              <button
+                                onClick={() => setAddingParentInfo(null)}
+                                className="px-1 text-slate-400 hover:text-white"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedRatio(4);
+                                setAddingParentInfo({ parentId: primaryBox.id, parentType: 'primario', portIndex: portNum });
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg border border-dashed border-slate-800 hover:border-sky-500/50 bg-slate-950/60 hover:bg-slate-900 text-xs text-slate-400 hover:text-sky-300 flex items-center gap-1.5 transition"
+                              title={`Agregar Caja Secundaria a la salida #${portNum}`}
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Salida #{portNum}: + Secundario</span>
+                            </button>
+                          )
                         )}
                       </div>
                     );

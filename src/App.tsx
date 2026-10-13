@@ -1,17 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Network,
   Download,
   Upload,
-  Trash2
+  Trash2,
+  Search
 } from 'lucide-react';
-import type { OLTDevice, FTTHNode } from './types/ftth';
+import type { OLTDevice, FTTHNode, BreadcrumbStep } from './types/ftth';
 import { OLTListSidebar } from './components/OLTListSidebar';
 import { SynopticTreeCanvas } from './components/SynopticTreeCanvas';
 import { CreateOLTModal } from './components/CreateOLTModal';
+import { EditBoxModal } from './components/EditBoxModal';
+import { HierarchyBreadcrumbBar } from './components/HierarchyBreadcrumbBar';
+import { BoxSearchModal } from './components/BoxSearchModal';
 
-// Inicialización de OLT con bandejas y topología 1x4 + 1x4 + 1x8
-const initialOLTs: OLTDevice[] = [
+const STORAGE_KEY = 'ftth_designer_olts_v2';
+
+const initialDefaultOLTs: OLTDevice[] = [
   {
     id: 'olt-1',
     name: 'OLT Central',
@@ -32,6 +37,7 @@ const initialOLTs: OLTDevice[] = [
           name: 'Caja Primaria 1x4',
           type: 'caja_primaria',
           ratio: 4,
+          location: 'Cámara Subterránea Mitre',
           isCollapsed: false,
           children: [
             {
@@ -40,6 +46,7 @@ const initialOLTs: OLTDevice[] = [
               type: 'caja_secundaria',
               ratio: 4,
               parentPortIndex: 1,
+              location: 'Poste 12 - Av. San Martín',
               isCollapsed: false,
               children: [
                 {
@@ -48,6 +55,7 @@ const initialOLTs: OLTDevice[] = [
                   type: 'caja_nap',
                   ratio: 8,
                   parentPortIndex: 1,
+                  location: 'Poste 14 - Esquina Belgrano',
                   children: []
                 },
                 {
@@ -56,22 +64,7 @@ const initialOLTs: OLTDevice[] = [
                   type: 'caja_nap',
                   ratio: 8,
                   parentPortIndex: 2,
-                  children: []
-                },
-                {
-                  id: 'nap-03',
-                  name: 'NAP #3 (1x8)',
-                  type: 'caja_nap',
-                  ratio: 8,
-                  parentPortIndex: 3,
-                  children: []
-                },
-                {
-                  id: 'nap-04',
-                  name: 'NAP #4 (1x8)',
-                  type: 'caja_nap',
-                  ratio: 8,
-                  parentPortIndex: 4,
+                  location: 'Poste 16 - Calle Rivadavia',
                   children: []
                 }
               ]
@@ -82,17 +75,9 @@ const initialOLTs: OLTDevice[] = [
               type: 'caja_secundaria',
               ratio: 4,
               parentPortIndex: 2,
+              location: 'Poste 24 - Barrio Norte',
               isCollapsed: true,
-              children: [
-                {
-                  id: 'nap-05',
-                  name: 'NAP #1 (1x8)',
-                  type: 'caja_nap',
-                  ratio: 8,
-                  parentPortIndex: 1,
-                  children: []
-                }
-              ]
+              children: []
             }
           ]
         }
@@ -103,49 +88,51 @@ const initialOLTs: OLTDevice[] = [
         slotIndex: 1,
         portIndex: 2,
         slotPort: '0/1/2',
-      },
-      {
-        id: 'pon-1-1-3',
-        name: 'S1-PON03',
-        slotIndex: 1,
-        portIndex: 3,
-        slotPort: '0/1/3',
-      },
-      {
-        id: 'pon-1-2-1',
-        name: 'S2-PON01',
-        slotIndex: 2,
-        portIndex: 1,
-        slotPort: '0/2/1',
-      }
-    ]
-  },
-  {
-    id: 'olt-2',
-    name: 'OLT Pop Norte',
-    brand: 'ZTE',
-    model: 'C320',
-    chassisType: 'modular',
-    slotsCount: 2,
-    portsPerSlot: 4,
-    ponPorts: [
-      {
-        id: 'pon-2-1-1',
-        name: 'S1-PON01',
-        slotIndex: 1,
-        portIndex: 1,
-        slotPort: '0/1/1',
       }
     ]
   }
 ];
 
 export function App() {
-  const [olts, setOlts] = useState<OLTDevice[]>(initialOLTs);
+  // Carga inicial con persistencia LocalStorage
+  const [olts, setOlts] = useState<OLTDevice[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn("Error leyendo localStorage, usando valores por defecto:", e);
+    }
+    return initialDefaultOLTs;
+  });
+
   const [selectedOltId, setSelectedOltId] = useState<string | null>('olt-1');
   const [selectedPonId, setSelectedPonId] = useState<string | null>('pon-1-1-1');
   const [expandedOltIds, setExpandedOltIds] = useState<string[]>(['olt-1']);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Modales
+  const [isCreateOltModalOpen, setIsCreateOltModalOpen] = useState(false);
+  const [editingNode, setEditingNode] = useState<FTTHNode | null>(null);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
+  // Selección de caja y barra de ruta de fibra
+  const [selectedBoxId, setSelectedBoxId] = useState<string | null>('nap-01');
+  const [breadcrumbSteps, setBreadcrumbSteps] = useState<BreadcrumbStep[]>([
+    { id: 'pri-01', name: 'Caja Primaria 1x4', type: 'caja_primaria', location: 'Cámara Subterránea Mitre' },
+    { id: 'sec-01', name: 'Secundario #1 (1x4)', type: 'caja_secundaria', portUsed: 1, location: 'Poste 12 - Av. San Martín' },
+    { id: 'nap-01', name: 'NAP #1 (1x8)', type: 'caja_nap', portUsed: 1, location: 'Poste 14 - Esquina Belgrano' },
+  ]);
+
+  // Guardado reactivo en LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(olts));
+    } catch (e) {
+      console.error("Error guardando en localStorage:", e);
+    }
+  }, [olts]);
 
   const currentOlt = olts.find(o => o.id === selectedOltId) || olts[0];
   const currentPon = currentOlt?.ponPorts.find(p => p.id === selectedPonId) || currentOlt?.ponPorts[0];
@@ -206,10 +193,67 @@ export function App() {
     );
   };
 
+  // Guardar datos editados de una caja
+  const handleSaveEditedBox = (updatedFields: Partial<FTTHNode>) => {
+    if (!editingNode || !currentPon?.primaryBox) return;
+
+    const updateRecursively = (node: FTTHNode): FTTHNode => {
+      if (node.id === editingNode.id) {
+        return { ...node, ...updatedFields };
+      }
+      return {
+        ...node,
+        children: (node.children || []).map(updateRecursively)
+      };
+    };
+
+    const newTree = updateRecursively(currentPon.primaryBox);
+    handleUpdatePrimaryBox(newTree);
+
+    // Actualizar nombre en la barra de ruta si estaba seleccionada
+    setBreadcrumbSteps(prev =>
+      prev.map(step => step.id === editingNode.id ? { ...step, ...updatedFields } : step)
+    );
+  };
+
   const handleClearCurrentPon = () => {
     const confirmClear = window.confirm(`¿Estás seguro de que deseas borrar todo el diagrama del ${currentPon?.name}?`);
     if (confirmClear) {
       handleUpdatePrimaryBox(undefined);
+      setSelectedBoxId(null);
+      setBreadcrumbSteps([]);
+    }
+  };
+
+  // Manejo de clic en resultado de búsqueda
+  const handleSelectSearchResult = (result: { boxId: string; oltId: string; ponId: string }) => {
+    setSelectedOltId(result.oltId);
+    setSelectedPonId(result.ponId);
+    if (!expandedOltIds.includes(result.oltId)) {
+      setExpandedOltIds(prev => [...prev, result.oltId]);
+    }
+
+    // Construir la ruta de la caja encontrada para mostrar en el breadcrumb
+    const targetOlt = olts.find(o => o.id === result.oltId);
+    const targetPon = targetOlt?.ponPorts.find(p => p.id === result.ponId);
+
+    if (targetPon?.primaryBox) {
+      const pathSteps: BreadcrumbStep[] = [];
+      const findPath = (node: FTTHNode, trail: BreadcrumbStep[]): boolean => {
+        const currentTrail = [...trail, { id: node.id, name: node.name, type: node.type, portUsed: node.parentPortIndex, location: node.location }];
+        if (node.id === result.boxId) {
+          pathSteps.push(...currentTrail);
+          return true;
+        }
+        for (const child of node.children || []) {
+          if (findPath(child, currentTrail)) return true;
+        }
+        return false;
+      };
+
+      findPath(targetPon.primaryBox, []);
+      setSelectedBoxId(result.boxId);
+      setBreadcrumbSteps(pathSteps);
     }
   };
 
@@ -219,7 +263,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `FTTH-OLTs-Sinoptico-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `FTTH-Redes-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -249,7 +293,7 @@ export function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#090d16] text-slate-100 overflow-hidden font-sans">
-      {/* Header */}
+      {/* Top Header */}
       <header className="h-12 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 flex items-center justify-between z-30 select-none flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 shadow-sm">
@@ -260,12 +304,26 @@ export function App() {
               FTTH Diagrama de Llaves
             </h1>
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              1x4 + 1x4 + 1x8
+              Topología Libre
             </span>
           </div>
         </div>
 
+        {/* Acciones principales y Buscador */}
         <div className="flex items-center gap-2">
+          {/* Botón Buscador Global */}
+          <button
+            onClick={() => setIsSearchModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-medium text-slate-300 flex items-center gap-1.5 transition"
+            title="Buscar cualquier caja en la red"
+          >
+            <Search className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Buscar Caja...</span>
+            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-500 font-mono">/</span>
+          </button>
+
+          <div className="h-4 w-[1px] bg-slate-800" />
+
           <button
             onClick={handleClearCurrentPon}
             className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-800/50 text-[11px] font-semibold text-red-300 hover:text-red-100 flex items-center gap-1 transition"
@@ -299,7 +357,7 @@ export function App() {
 
       {/* Main Container */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Sidebar OLTs con bandejas */}
+        {/* Sidebar OLTs */}
         <OLTListSidebar
           olts={olts}
           selectedOltId={selectedOltId}
@@ -307,17 +365,37 @@ export function App() {
           expandedOltIds={expandedOltIds}
           onToggleExpandOlt={handleToggleExpandOlt}
           onSelectPon={handleSelectPon}
-          onOpenCreateOltModal={() => setIsCreateModalOpen(true)}
+          onOpenCreateOltModal={() => setIsCreateOltModalOpen(true)}
           onDeleteOlt={handleDeleteOlt}
         />
 
-        {/* Lienzo del Cuadro Sinóptico de Llaves */}
-        <main className="flex-1 relative overflow-hidden bg-[#0b0f19]">
+        {/* Lienzo y Barra de Ruta de Fibra */}
+        <main className="flex-1 relative overflow-hidden bg-[#0b0f19] flex flex-col p-4">
           {currentPon ? (
-            <SynopticTreeCanvas
-              pon={currentPon}
-              onUpdatePrimaryBox={handleUpdatePrimaryBox}
-            />
+            <>
+              {/* Barra Superior de Muestreo / Ruta Jerárquica */}
+              <HierarchyBreadcrumbBar
+                oltName={currentOlt?.name || 'OLT'}
+                ponName={currentPon.name}
+                slotPort={currentPon.slotPort}
+                steps={breadcrumbSteps}
+              />
+
+              {/* Cuadro Sinóptico de Llaves */}
+              <div className="flex-1 relative overflow-hidden rounded-xl border border-slate-800/60 bg-[#0b0f19]/80">
+                <SynopticTreeCanvas
+                  pon={currentPon}
+                  oltName={currentOlt?.name || 'OLT'}
+                  selectedBoxId={selectedBoxId}
+                  onSelectBox={(boxId, steps) => {
+                    setSelectedBoxId(boxId);
+                    setBreadcrumbSteps(steps);
+                  }}
+                  onUpdatePrimaryBox={handleUpdatePrimaryBox}
+                  onOpenEditBoxModal={(node) => setEditingNode(node)}
+                />
+              </div>
+            </>
           ) : (
             <div className="flex items-center justify-center h-full text-slate-500 text-xs">
               Selecciona un puerto PON del panel izquierdo para desplegar su cuadro sinóptico.
@@ -327,10 +405,28 @@ export function App() {
       </div>
 
       {/* Modal Crear OLT */}
-      {isCreateModalOpen && (
+      {isCreateOltModalOpen && (
         <CreateOLTModal
-          onClose={() => setIsCreateModalOpen(false)}
+          onClose={() => setIsCreateOltModalOpen(false)}
           onSave={handleCreateOlt}
+        />
+      )}
+
+      {/* Modal Editar Caja */}
+      {editingNode && (
+        <EditBoxModal
+          node={editingNode}
+          onClose={() => setEditingNode(null)}
+          onSave={handleSaveEditedBox}
+        />
+      )}
+
+      {/* Modal Buscador de Cajas */}
+      {isSearchModalOpen && (
+        <BoxSearchModal
+          olts={olts}
+          onClose={() => setIsSearchModalOpen(false)}
+          onSelectResult={handleSelectSearchResult}
         />
       )}
     </div>

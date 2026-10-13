@@ -7,7 +7,9 @@ export interface FTTHNode {
   type: NodeType;
   ratio?: SplitterRatio;
   parentPortIndex?: number; // Salida 1, 2, 3, 4... del padre
-  isCollapsed?: boolean;     // Para minimizar/guardar la llave
+  location?: string;        // Poste, Cámara o Calle (ej: "Poste 14 - Mitre y Belgrano")
+  notes?: string;           // Notas técnicas
+  isCollapsed?: boolean;    // Para minimizar/guardar la llave
   children: FTTHNode[];
 }
 
@@ -27,8 +29,16 @@ export interface OLTDevice {
   name: string;          // ej. "OLT Central"
   brand: string;         // ej. Huawei, ZTE, Fiberhome, VSOL
   model: string;         // ej. MA5800-X7, C320, V1600G
-  chassisType: OLTChassisType; // Pizzabox o Modular con bandejas
-  slotsCount: number;    // Cantidad de bandejas/slots si es modular (1 si es pizzabox)
-  portsPerSlot: number;  // Cantidad de puertos PON por bandeja (ej. 8 o 16)
+  chassisType: OLTChassisType;
+  slotsCount: number;    // Cantidad de bandejas/slots
+  portsPerSlot: number;  // Cantidad de puertos PON por bandeja
   ponPorts: PONPort[];
+}
+
+export interface BreadcrumbStep {
+  id: string;
+  name: string;
+  type: string;
+  portUsed?: number;
+  location?: string;
 }
