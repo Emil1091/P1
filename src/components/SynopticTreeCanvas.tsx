@@ -12,7 +12,7 @@ import {
   Edit2,
   MapPin
 } from 'lucide-react';
-import type { FTTHNode, PONPort, SplitterRatio, BreadcrumbStep, SimulationData } from '../types/ftth';
+import type { FTTHNode, PONPort, SplitterRatio, BreadcrumbStep, SimulationData, BoxSignalStatus } from '../types/ftth';
 import { calculateBoxStatus, calculateParentStatus, STATUS_COLORS, averageSignal } from '../utils/simulation';
 import { CurlyBracket } from './CurlyBracket';
 
@@ -25,6 +25,12 @@ interface SynopticTreeCanvasProps {
   onOpenEditBoxModal: (node: FTTHNode) => void;
   /** Datos de simulación de señal. Si undefined, la simulación está inactiva. */
   simulationData?: SimulationData;
+  /** Modo de pintado (null = solo selección) */
+  paintMode?: BoxSignalStatus | null;
+  /** Estados asignados manualmente a cajas */
+  manualStatuses?: Record<string, BoxSignalStatus>;
+  /** Callback al pintar una caja */
+  onPaintBox?: (boxId: string, mode: BoxSignalStatus) => void;
 }
 
 export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
@@ -35,6 +41,9 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   onUpdatePrimaryBox,
   onOpenEditBoxModal,
   simulationData,
+  paintMode,
+  manualStatuses,
+  onPaintBox,
 }) => {
   const primaryBox = pon.primaryBox;
 
@@ -182,9 +191,10 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   }, [primaryBox]);
 
   // ─── Datos de simulación pre-calculados para el render ────────────────────
-  const priSim = primaryBox && simulationData
-    ? { status: calculateParentStatus(primaryBox, simulationData), cfg: STATUS_COLORS[calculateParentStatus(primaryBox, simulationData)] }
+  const priStatus = primaryBox && simulationData
+    ? (manualStatuses?.[primaryBox.id] ?? calculateParentStatus(primaryBox, simulationData))
     : null;
+  const priCfg = priStatus ? STATUS_COLORS[priStatus] : null;
 
   return (
     <div className="w-full h-full overflow-x-auto overflow-y-auto bg-[#0b0f19] p-6 select-none flex flex-col justify-start">
@@ -290,12 +300,13 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                 onSelectBox(primaryBox.id, [
                   { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, location: primaryBox.location }
                 ]);
+                if (paintMode && onPaintBox) onPaintBox(primaryBox.id, paintMode);
               }}
               className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 cursor-pointer transition-all duration-200 ${
                 selectedBoxId === primaryBox.id
                   ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
-                  : priSim && priSim.status !== 'normal'
-                  ? `${priSim.cfg.border} ${priSim.cfg.bg}`
+                  : priStatus && priStatus !== 'normal'
+                  ? `${priCfg?.border} ${priCfg?.bg}`
                   : 'border-indigo-500/40 hover:border-indigo-400'
               }`}
             >
@@ -345,9 +356,9 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
               >
                 <Trash2 className="w-3 h-3" />
               </button>
-              {priSim && priSim.status !== 'normal' && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ml-1 ${priSim.cfg.badge}`}>
-                  {priSim.cfg.label}
+              {priStatus && priStatus !== 'normal' && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ml-1 ${priCfg?.badge}`}>
+                  {priCfg?.label}
                 </span>
               )}
             </div>
@@ -373,7 +384,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
 
                     // Simulación para secundario
                     const secStatus = secNode && simulationData
-                      ? calculateParentStatus(secNode, simulationData)
+                      ? (manualStatuses?.[secNode.id] ?? calculateParentStatus(secNode, simulationData))
                       : null;
                     const secSimCfg = secStatus ? STATUS_COLORS[secStatus] : null;
 
@@ -388,6 +399,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                   { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
                                   { id: secNode.id, name: secNode.name, type: secNode.type, location: secNode.location }
                                 ]);
+                                if (paintMode && onPaintBox) onPaintBox(secNode.id, paintMode);
                               }}
                               className={`px-2.5 py-1.5 rounded-lg bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
                                 selectedBoxId === secNode.id
@@ -475,7 +487,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                       ? (simulationData[napNode.id] ?? [])
                                       : [];
                                     const napStatus = napNode && simulationData
-                                      ? calculateBoxStatus(napClients)
+                                      ? (manualStatuses?.[napNode.id] ?? calculateBoxStatus(napClients))
                                       : null;
                                     const napSimCfg = napStatus ? STATUS_COLORS[napStatus] : null;
                                     const napAvg = napClients.length > 0 ? averageSignal(napClients) : null;
@@ -491,6 +503,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                                 { id: secNode.id, name: secNode.name, type: secNode.type, portUsed: napPortNum, location: secNode.location },
                                                 { id: napNode.id, name: napNode.name, type: napNode.type, location: napNode.location }
                                               ]);
+                                              if (paintMode && onPaintBox) onPaintBox(napNode.id, paintMode);
                                             }}
                                             className={`px-2 py-1 rounded-md bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
                                               selectedBoxId === napNode.id

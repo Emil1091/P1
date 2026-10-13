@@ -5,7 +5,7 @@ import {
   Upload,
   Trash2
 } from 'lucide-react';
-import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort, SimulationData } from './types/ftth';
+import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort, SimulationData, BoxSignalStatus } from './types/ftth';
 import { OLTListSidebar } from './components/OLTListSidebar';
 import { SynopticTreeCanvas } from './components/SynopticTreeCanvas';
 import { CreateOLTModal } from './components/CreateOLTModal';
@@ -14,8 +14,7 @@ import { EditBoxModal } from './components/EditBoxModal';
 import { HierarchyBreadcrumbBar } from './components/HierarchyBreadcrumbBar';
 import { DropdownSearchBar } from './components/DropdownSearchBar';
 import type { SearchResultItem } from './components/DropdownSearchBar';
-import { SimulationPanel } from './components/SimulationPanel';
-import { generateSimulationData } from './utils/simulation';
+import { generateSimulationData, findNodeById, collectNapDescendants, createClientsForStatus, calculateBoxStatus } from './utils/simulation';
 
 const STORAGE_KEY = 'ftth_designer_olts_v2';
 
@@ -122,10 +121,15 @@ export function App() {
   // ─── Simulación de señal ────────────────────────────────────────────────────
   const [isSimulationActive, setIsSimulationActive] = useState(false);
   const [simulationData, setSimulationData] = useState<SimulationData>({});
+  const [paintMode, setPaintMode] = useState<BoxSignalStatus | null>(null);
+  const [manualStatuses, setManualStatuses] = useState<Record<string, BoxSignalStatus>>({});
+  const [ponOfflineMap, setPonOfflineMap] = useState<Record<string, boolean>>({});
 
   const handleToggleSimulation = () => {
     if (!isSimulationActive && currentPon?.primaryBox) {
       setSimulationData(generateSimulationData(currentPon.primaryBox));
+      setManualStatuses({});
+      setPaintMode(null);
     }
     setIsSimulationActive(v => !v);
   };
@@ -133,7 +137,38 @@ export function App() {
   const handleRegenerateSimulation = () => {
     if (currentPon?.primaryBox) {
       setSimulationData(generateSimulationData(currentPon.primaryBox));
+      setManualStatuses({});
     }
+  };
+
+  // ─── Pintado manual de eventos sobre cajas ──────────────────────────────────
+  const handlePaintBox = (boxId: string, mode: BoxSignalStatus) => {
+    if (!isSimulationActive) return;
+    setManualStatuses((prev) => {
+      if (mode === 'normal') {
+        const { [boxId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [boxId]: mode };
+    });
+
+    if (!currentPon?.primaryBox) return;
+    const target = findNodeById(currentPon.primaryBox, boxId);
+    if (!target) return;
+    const napNodes = collectNapDescendants(target);
+    if (napNodes.length === 0) return;
+
+    setSimulationData((prev) => {
+      const next = { ...prev };
+      for (const nap of napNodes) {
+        if (mode === 'normal') {
+          next[nap.id] = generateSimulationData(nap)[nap.id] ?? next[nap.id] ?? [];
+        } else {
+          next[nap.id] = createClientsForStatus(nap, mode);
+        }
+      }
+      return next;
+    });
   };
 
   // Selección de caja y barra de ruta de fibra
@@ -151,6 +186,18 @@ export function App() {
       console.error("Error guardando en localStorage:", e);
     }
   }, [olts]);
+
+  useEffect(() => {
+    if (!isSimulationActive) {
+      setPonOfflineMap({});
+      return;
+    }
+    if (!selectedPonId) return;
+    const hasOffline =
+      Object.values(simulationData).some((clients) => calculateBoxStatus(clients) === 'offline') ||
+      Object.values(manualStatuses).includes('offline');
+    setPonOfflineMap((prev) => ({ ...prev, [selectedPonId]: hasOffline }));
+  }, [isSimulationActive, simulationData, manualStatuses, selectedPonId]);
 
   const currentOlt = olts.find(o => o.id === selectedOltId) || olts[0];
   const currentPon = currentOlt?.ponPorts.find(p => p.id === selectedPonId) || currentOlt?.ponPorts[0];
@@ -440,6 +487,16 @@ export function App() {
           onOpenEditOltModal={(olt) => setEditingOlt(olt)}
           onAddPonDirect={handleAddPonDirect}
           onDeleteOlt={handleDeleteOlt}
+          // Simulación
+          isSimulationActive={isSimulationActive}
+          onToggleSimulation={handleToggleSimulation}
+          onRegenerateSimulation={handleRegenerateSimulation}
+          simulationData={simulationData}
+          selectedBoxId={selectedBoxId}
+          selectedBoxName={breadcrumbSteps[breadcrumbSteps.length - 1]?.name}
+          paintMode={paintMode}
+          onPaintModeChange={setPaintMode}
+          ponOfflineMap={ponOfflineMap}
         />
 
         <main className="flex-1 relative overflow-hidden bg-[#0b0f19] flex flex-col p-4 gap-3">
@@ -450,16 +507,6 @@ export function App() {
                 ponName={currentPon.name}
                 slotPort={currentPon.slotPort}
                 steps={breadcrumbSteps}
-              />
-
-              {/* Panel de simulación de señal */}
-              <SimulationPanel
-                isActive={isSimulationActive}
-                onToggle={handleToggleSimulation}
-                onRegenerate={handleRegenerateSimulation}
-                simData={simulationData}
-                selectedBoxId={selectedBoxId}
-                selectedBoxName={breadcrumbSteps[breadcrumbSteps.length - 1]?.name}
               />
 
               <div className="flex-1 relative overflow-hidden rounded-xl border border-slate-800/60 bg-[#0b0f19]/80">
@@ -474,6 +521,9 @@ export function App() {
                   onUpdatePrimaryBox={handleUpdatePrimaryBox}
                   onOpenEditBoxModal={(node) => setEditingNode(node)}
                   simulationData={isSimulationActive ? simulationData : undefined}
+                  paintMode={paintMode}
+                  manualStatuses={manualStatuses}
+                  onPaintBox={handlePaintBox}
                 />
               </div>
             </>

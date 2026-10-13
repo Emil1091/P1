@@ -138,7 +138,79 @@ export const STATUS_COLORS: Record<BoxSignalStatus, {
   offline:  { border: 'border-red-400/70',    bg: 'bg-red-950/20',      badge: 'bg-red-500/20     text-red-300',     label: 'Sin señal', dot: 'bg-red-400'     },
 };
 
-/** Devuelve la señal promedio de los clientes online, o null si no hay */
+// ─── Helpers de interacción (pintado manual de eventos) ───────────────────────
+
+/**
+ * Busca una caja por su id dentro del árbol.
+ */
+export function findNodeById(root: FTTHNode | undefined, id: string): FTTHNode | null {
+  if (!root) return null;
+  if (root.id === id) return root;
+  for (const child of root.children ?? []) {
+    const found = findNodeById(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Devuelve todos los NAPs descendientes de una caja (o la propia NAP).
+ */
+export function collectNapDescendants(node: FTTHNode | null | undefined): FTTHNode[] {
+  if (!node) return [];
+  const result: FTTHNode[] = [];
+  const walk = (n: FTTHNode) => {
+    if (n.type === 'caja_nap') result.push(n);
+    for (const child of n.children ?? []) walk(child);
+  };
+  walk(node);
+  return result;
+}
+
+/**
+ * Genera clientes para un estado de simulación solicitado por el usuario.
+ */
+export function createClientsForStatus(node: FTTHNode, status: BoxSignalStatus): SimulatedClient[] {
+  const capacity = node.ratio ?? 8;
+  const count = Math.max(1, Math.floor(capacity * 0.7));
+  const make = (signal: number) => Array.from({ length: count }, (_, i) => ({
+    id: `${node.id}-onu-${i + 1}`,
+    name: `ONU-${String(i + 1).padStart(2, '0')}`,
+    signal,
+    isOnline: true,
+  }));
+  // offline total
+  if (status === 'offline') {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `${node.id}-onu-${i + 1}`,
+      name: `ONU-${String(i + 1).padStart(2, '0')}`,
+      signal: 0,
+      isOnline: false,
+    }));
+  }
+  if (status === 'warning') {
+    const warnCount = Math.ceil(count * 0.7);
+    const clients = [
+      ...make(-28).slice(0, warnCount),
+      ...make(-24).slice(0, count - warnCount),
+    ];
+    return clients.slice(0, count);
+  }
+  if (status === 'critical') {
+    const critCount = Math.ceil(count * 0.7);
+    const clients = [
+      ...make(-29.5).slice(0, critCount),
+      ...make(-24).slice(0, count - critCount),
+    ];
+    return clients.slice(0, count);
+  }
+  // normal
+  return make(-21);
+}
+
+/**
+ * Devuelve la señal promedio de los clientes online, o null si no hay
+ */
 export function averageSignal(clients: SimulatedClient[]): number | null {
   const online = clients.filter(c => c.isOnline);
   if (online.length === 0) return null;

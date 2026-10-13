@@ -11,6 +11,9 @@ interface SimulationPanelProps {
   /** Nombre de la caja seleccionada, para mostrar detalle */
   selectedBoxId: string | null;
   selectedBoxName?: string;
+  // Pintado manual
+  paintMode?: BoxSignalStatus | null;
+  onPaintModeChange?: (mode: BoxSignalStatus | null) => void;
 }
 
 const StatusIcon: React.FC<{ status: BoxSignalStatus }> = ({ status }) => {
@@ -54,6 +57,8 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
   simData,
   selectedBoxId,
   selectedBoxName,
+  paintMode,
+  onPaintModeChange,
 }) => {
   const [showDetail, setShowDetail] = useState(false);
 
@@ -118,6 +123,44 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
       {/* Contenido activo */}
       {isActive && (
         <>
+{/* Pincel de evento por clic */}
+          <div className="flex items-center gap-1.5 flex-wrap px-2 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+            <span className="text-[10px] text-slate-500">Pincel:</span>
+            {([
+              { label: 'Normal', mode: 'normal' as BoxSignalStatus, color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30' },
+              { label: 'Degradada', mode: 'warning' as BoxSignalStatus, color: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/30' },
+              { label: 'Crítica', mode: 'critical' as BoxSignalStatus, color: 'bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30' },
+              { label: 'Sin señal', mode: 'offline' as BoxSignalStatus, color: 'bg-red-500/20 text-red-300 border-red-500/40 hover:bg-red-500/30' },
+            ]).map(({ label, mode, color }) => (
+              <button
+                key={mode}
+                onClick={() => onPaintModeChange?.(paintMode === mode ? null : mode)}
+                className={`px-2 py-0.5 text-[10px] font-semibold rounded border transition ${
+                  paintMode === mode ? color + ' ring-1 ring-white/20' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+                title={`Marcar cajas como ${label}`}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              onClick={() => onPaintModeChange?.(null)}
+              className={`px-2 py-0.5 text-[10px] font-semibold rounded border transition ${
+                paintMode === null
+                  ? 'bg-slate-700 text-white border-slate-500'
+                  : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+              }`}
+              title="Desactivar pincel (sin pintar)"
+            >
+              Apagar
+            </button>
+          </div>
+          {paintMode && (
+            <p className="text-[10px] text-slate-400 px-1">
+              Pincel activo: haz clic sobre una caja para marcarla como {STATUS_COLORS[paintMode].label.toLowerCase()}.
+            </p>
+          )}
+
           {/* Leyenda de estados */}
           <div className="grid grid-cols-4 gap-1.5 pt-1">
             {(Object.entries(STATUS_COLORS) as [BoxSignalStatus, typeof STATUS_COLORS[BoxSignalStatus]][]).map(([status, cfg]) => (

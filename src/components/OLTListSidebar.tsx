@@ -10,7 +10,8 @@ import {
   Trash2,
   Edit2
 } from 'lucide-react';
-import type { OLTDevice, PONPort } from '../types/ftth';
+import type { OLTDevice, PONPort, BoxSignalStatus, SimulationData } from '../types/ftth';
+import { SimulationPanel } from './SimulationPanel';
 
 interface OLTListSidebarProps {
   olts: OLTDevice[];
@@ -23,6 +24,18 @@ interface OLTListSidebarProps {
   onOpenEditOltModal: (olt: OLTDevice) => void;
   onAddPonDirect: (oltId: string, slotIndex?: number) => void;
   onDeleteOlt: (oltId: string) => void;
+  // Simulación
+  isSimulationActive: boolean;
+  onToggleSimulation: () => void;
+  onRegenerateSimulation: () => void;
+  simulationData: SimulationData;
+  selectedBoxId: string | null;
+  selectedBoxName?: string;
+  // Pintado manual
+  paintMode: BoxSignalStatus | null;
+  onPaintModeChange: (mode: BoxSignalStatus | null) => void;
+  // Indicador de cajas off
+  ponOfflineMap?: Record<string, boolean>;
 }
 
 export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
@@ -36,6 +49,18 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   onOpenEditOltModal,
   onAddPonDirect,
   onDeleteOlt,
+  // simulación
+  isSimulationActive,
+  onToggleSimulation,
+  onRegenerateSimulation,
+  simulationData,
+  selectedBoxId,
+  selectedBoxName,
+  // pintado manual
+  paintMode,
+  onPaintModeChange,
+  // indicador off
+  ponOfflineMap,
 }) => {
   return (
     <aside className="w-80 h-full bg-slate-950 border-r border-slate-800/80 flex flex-col z-20 shadow-2xl select-none flex-shrink-0">
@@ -103,6 +128,11 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                       <span>{olt.model}</span>
                       <span>•</span>
                       <span className="font-mono text-indigo-400">{olt.ponPorts.length} PONs</span>
+                      {olt.ponPorts.some((p) => Boolean(ponOfflineMap?.[p.id])) && (
+                        <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500/20 border border-red-500/40 text-red-300 text-[9px] font-bold animate-pulse" title="PON con caja sin señal">
+                          !
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -226,6 +256,11 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                                   >
                                     {hasNetwork ? 'Con Red' : 'Libre'}
                                   </span>
+                                  {Boolean(ponOfflineMap?.[pon.id]) && (
+                                    <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500/20 border border-red-500/40 text-red-300 text-[9px] font-bold animate-pulse" title="PON con caja sin señal">
+                                      !
+                                    </span>
+                                  )}
                                 </div>
                               );
                             })}
@@ -278,6 +313,11 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                             >
                               {hasNetwork ? 'Con Red' : 'Libre'}
                             </span>
+                            {Boolean(ponOfflineMap?.[pon.id]) && (
+                              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500/20 border border-red-500/40 text-red-300 text-[9px] font-bold animate-pulse" title="PON con caja sin señal">
+                                !
+                              </span>
+                            )}
                           </div>
                         );
                       })}
@@ -288,6 +328,19 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
             </div>
           );
         })}
+      </div>
+
+      <div className="px-2.5 py-2 border-t border-slate-800/80 bg-slate-950 flex-shrink-0 max-h-[42vh] overflow-y-auto">
+        <SimulationPanel
+          isActive={isSimulationActive}
+          onToggle={onToggleSimulation}
+          onRegenerate={onRegenerateSimulation}
+          simData={simulationData}
+          selectedBoxId={selectedBoxId}
+          selectedBoxName={selectedBoxName}
+          paintMode={paintMode}
+          onPaintModeChange={onPaintModeChange}
+        />
       </div>
 
       <div className="p-3 border-t border-slate-800/80 bg-slate-950 text-[10px] text-slate-500 text-center">
