@@ -7,7 +7,8 @@ import {
   Plus,
   Layers,
   Cpu,
-  Trash2
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import type { OLTDevice, PONPort } from '../types/ftth';
 
@@ -19,6 +20,8 @@ interface OLTListSidebarProps {
   onToggleExpandOlt: (oltId: string) => void;
   onSelectPon: (oltId: string, ponId: string) => void;
   onOpenCreateOltModal: () => void;
+  onOpenEditOltModal: (olt: OLTDevice) => void;
+  onAddPonDirect: (oltId: string, slotIndex?: number) => void;
   onDeleteOlt: (oltId: string) => void;
 }
 
@@ -30,6 +33,8 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   onToggleExpandOlt,
   onSelectPon,
   onOpenCreateOltModal,
+  onOpenEditOltModal,
+  onAddPonDirect,
   onDeleteOlt,
 }) => {
   return (
@@ -114,6 +119,31 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                       </span>
                     )}
                   </span>
+
+                  {/* Botón Editar OLT */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenEditOltModal(olt);
+                    }}
+                    className="p-1 text-slate-400 hover:text-sky-300 rounded hover:bg-slate-800 transition"
+                    title="Editar OLT"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+
+                  {/* Botón Agregar Puerto PON */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddPonDirect(olt.id);
+                    }}
+                    className="p-1 text-slate-400 hover:text-emerald-400 rounded hover:bg-slate-800 transition"
+                    title="Agregar Puerto PON"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+
                   {olts.length > 1 && (
                     <button
                       onClick={(e) => {
@@ -139,9 +169,18 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                       const slotPorts = olt.ponPorts.filter(p => p.slotIndex === slotNum);
                       return (
                         <div key={`slot-${olt.id}-${slotNum}`} className="space-y-1">
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase px-1.5 pt-1">
-                            <Layers className="w-3 h-3 text-indigo-400" />
-                            <span>Bandeja / Slot {slotNum}</span>
+                          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase px-1.5 pt-1">
+                            <div className="flex items-center gap-1">
+                              <Layers className="w-3 h-3 text-indigo-400" />
+                              <span>Bandeja / Slot {slotNum}</span>
+                            </div>
+                            <button
+                              onClick={() => onAddPonDirect(olt.id, slotNum)}
+                              className="text-slate-400 hover:text-emerald-400 text-[10px] flex items-center gap-0.5"
+                              title="Agregar PON a esta bandeja"
+                            >
+                              <Plus className="w-2.5 h-2.5" /> PON
+                            </button>
                           </div>
                           <div className="space-y-0.5">
                             {slotPorts.map((pon: PONPort) => {

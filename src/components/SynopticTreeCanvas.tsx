@@ -35,9 +35,9 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   const primaryBox = pon.primaryBox;
 
   const primaryBracketRef = useRef<HTMLDivElement>(null);
+  const selectedNodeRef = useRef<HTMLDivElement>(null);
   const [primaryBracketHeight, setPrimaryBracketHeight] = useState(120);
 
-  // Selector de ratio para la nueva caja que se está por agregar
   const [addingParentInfo, setAddingParentInfo] = useState<{
     parentId: string;
     parentType: 'pon' | 'primario' | 'secundario';
@@ -45,7 +45,17 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   } | null>(null);
   const [selectedRatio, setSelectedRatio] = useState<SplitterRatio>(4);
 
-  // Toggle colapsar / minimizar caja
+  // Auto-scroll suave para centrar la caja seleccionada si está en pantalla
+  useEffect(() => {
+    if (selectedBoxId && selectedNodeRef.current) {
+      selectedNodeRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center'
+      });
+    }
+  }, [selectedBoxId]);
+
   const handleToggleCollapse = (nodeId: string) => {
     if (!primaryBox) return;
 
@@ -72,7 +82,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
     onUpdatePrimaryBox(setAll(primaryBox));
   };
 
-  // Crear caja con el ratio elegido
   const handleConfirmAddBox = () => {
     if (!addingParentInfo) return;
 
@@ -170,7 +179,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
 
   return (
     <div className="w-full h-full overflow-x-auto overflow-y-auto bg-[#0b0f19] p-6 select-none flex flex-col justify-start">
-      {/* Barra superior de controles */}
+      {/* Barra de cabecera */}
       <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-800/80">
         <div className="flex items-center gap-2">
           <div className="p-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400">
@@ -267,14 +276,15 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
         {primaryBox && (
           <div className="flex items-center gap-1">
             <div
+              ref={selectedBoxId === primaryBox.id ? selectedNodeRef : undefined}
               onClick={() => {
                 onSelectBox(primaryBox.id, [
                   { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, location: primaryBox.location }
                 ]);
               }}
-              className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 cursor-pointer transition ${
+              className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 cursor-pointer transition-all duration-200 ${
                 selectedBoxId === primaryBox.id
-                  ? 'border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-950/20'
+                  ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
                   : 'border-indigo-500/40 hover:border-indigo-400'
               }`}
             >
@@ -350,15 +360,16 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                         {secNode ? (
                           <div className="flex items-center gap-1">
                             <div
+                              ref={selectedBoxId === secNode.id ? selectedNodeRef : undefined}
                               onClick={() => {
                                 onSelectBox(secNode.id, [
                                   { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
                                   { id: secNode.id, name: secNode.name, type: secNode.type, location: secNode.location }
                                 ]);
                               }}
-                              className={`px-2.5 py-1.5 rounded-lg bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition ${
+                              className={`px-2.5 py-1.5 rounded-lg bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
                                 selectedBoxId === secNode.id
-                                  ? 'border-sky-400 ring-2 ring-sky-500/30 bg-sky-950/20'
+                                  ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
                                   : 'border-sky-500/40 hover:border-sky-400'
                               }`}
                             >
@@ -434,6 +445,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                       <div key={`nap-slot-${secNode.id}-${napPortNum}`} className="flex items-center gap-1">
                                         {napNode ? (
                                           <div
+                                            ref={selectedBoxId === napNode.id ? selectedNodeRef : undefined}
                                             onClick={() => {
                                               onSelectBox(napNode.id, [
                                                 { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
@@ -441,9 +453,9 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                                 { id: napNode.id, name: napNode.name, type: napNode.type, location: napNode.location }
                                               ]);
                                             }}
-                                            className={`px-2 py-1 rounded-md bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition ${
+                                            className={`px-2 py-1 rounded-md bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
                                               selectedBoxId === napNode.id
-                                                ? 'border-emerald-400 ring-2 ring-emerald-500/30 bg-emerald-950/20'
+                                                ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
                                                 : 'border-emerald-500/40 hover:border-emerald-400'
                                             }`}
                                           >
@@ -483,7 +495,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                             </button>
                                           </div>
                                         ) : (
-                                          // Ranura libre con selector de ratio
                                           addingParentInfo?.parentId === secNode.id && addingParentInfo.portIndex === napPortNum ? (
                                             <div className="flex items-center gap-1 p-0.5 rounded bg-slate-900 border border-emerald-500/50 text-[10px]">
                                               <select
@@ -530,7 +541,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                             )}
                           </div>
                         ) : (
-                          // Ranura secundaria libre con selector de ratio
                           addingParentInfo?.parentId === primaryBox.id && addingParentInfo.portIndex === portNum ? (
                             <div className="flex items-center gap-1 p-1 rounded bg-slate-900 border border-sky-500/50 text-xs">
                               <select

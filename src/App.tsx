@@ -3,16 +3,17 @@ import {
   Network,
   Download,
   Upload,
-  Trash2,
-  Search
+  Trash2
 } from 'lucide-react';
-import type { OLTDevice, FTTHNode, BreadcrumbStep } from './types/ftth';
+import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort } from './types/ftth';
 import { OLTListSidebar } from './components/OLTListSidebar';
 import { SynopticTreeCanvas } from './components/SynopticTreeCanvas';
 import { CreateOLTModal } from './components/CreateOLTModal';
+import { EditOLTModal } from './components/EditOLTModal';
 import { EditBoxModal } from './components/EditBoxModal';
 import { HierarchyBreadcrumbBar } from './components/HierarchyBreadcrumbBar';
-import { BoxSearchModal } from './components/BoxSearchModal';
+import { DropdownSearchBar } from './components/DropdownSearchBar';
+import type { SearchResultItem } from './components/DropdownSearchBar';
 
 const STORAGE_KEY = 'ftth_designer_olts_v2';
 
@@ -94,7 +95,6 @@ const initialDefaultOLTs: OLTDevice[] = [
 ];
 
 export function App() {
-  // Carga inicial con persistencia LocalStorage
   const [olts, setOlts] = useState<OLTDevice[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -103,7 +103,7 @@ export function App() {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {
-      console.warn("Error leyendo localStorage, usando valores por defecto:", e);
+      console.warn("Error leyendo localStorage:", e);
     }
     return initialDefaultOLTs;
   });
@@ -114,8 +114,8 @@ export function App() {
 
   // Modales
   const [isCreateOltModalOpen, setIsCreateOltModalOpen] = useState(false);
+  const [editingOlt, setEditingOlt] = useState<OLTDevice | null>(null);
   const [editingNode, setEditingNode] = useState<FTTHNode | null>(null);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
   // Selección de caja y barra de ruta de fibra
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>('nap-01');
@@ -125,7 +125,6 @@ export function App() {
     { id: 'nap-01', name: 'NAP #1 (1x8)', type: 'caja_nap', portUsed: 1, location: 'Poste 14 - Esquina Belgrano' },
   ]);
 
-  // Guardado reactivo en LocalStorage
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(olts));
@@ -156,6 +155,37 @@ export function App() {
     setSelectedOltId(newOlt.id);
     setSelectedPonId(newOlt.ponPorts[0]?.id || null);
     setExpandedOltIds(prev => [...prev, newOlt.id]);
+  };
+
+  const handleSaveEditedOlt = (updatedOlt: OLTDevice) => {
+    setOlts(prev => prev.map(o => o.id === updatedOlt.id ? updatedOlt : o));
+  };
+
+  const handleAddPonDirect = (oltId: string, slotIndex = 1) => {
+    setOlts(prev =>
+      prev.map(olt => {
+        if (olt.id === oltId) {
+          const slotPorts = olt.ponPorts.filter(p => p.slotIndex === slotIndex);
+          const nextPortIndex = slotPorts.length + 1;
+          const slotPort = olt.chassisType === 'modular' ? `0/${slotIndex}/${nextPortIndex}` : `0/${olt.ponPorts.length + 1}`;
+          const ponName = olt.chassisType === 'modular' ? `S${slotIndex}-PON${nextPortIndex < 10 ? '0' + nextPortIndex : nextPortIndex}` : `PON ${nextPortIndex < 10 ? '0' + nextPortIndex : nextPortIndex}`;
+
+          const newPon: PONPort = {
+            id: `pon-${olt.id}-${slotIndex}-${Date.now().toString().slice(-4)}`,
+            name: ponName,
+            slotIndex,
+            portIndex: nextPortIndex,
+            slotPort,
+          };
+
+          return {
+            ...olt,
+            ponPorts: [...olt.ponPorts, newPon]
+          };
+        }
+        return olt;
+      })
+    );
   };
 
   const handleDeleteOlt = (oltId: string) => {
@@ -193,7 +223,6 @@ export function App() {
     );
   };
 
-  // Guardar datos editados de una caja
   const handleSaveEditedBox = (updatedFields: Partial<FTTHNode>) => {
     if (!editingNode || !currentPon?.primaryBox) return;
 
@@ -210,7 +239,6 @@ export function App() {
     const newTree = updateRecursively(currentPon.primaryBox);
     handleUpdatePrimaryBox(newTree);
 
-    // Actualizar nombre en la barra de ruta si estaba seleccionada
     setBreadcrumbSteps(prev =>
       prev.map(step => step.id === editingNode.id ? { ...step, ...updatedFields } : step)
     );
@@ -225,33 +253,64 @@ export function App() {
     }
   };
 
-  // Manejo de clic en resultado de búsqueda
-  const handleSelectSearchResult = (result: { boxId: string; oltId: string; ponId: string }) => {
+  // Desplegar forzosamente toda la ruta hasta la caja buscada
+  const handleSelectSearchResult = (result: SearchResultItem) => {
     setSelectedOltId(result.oltId);
     setSelectedPonId(result.ponId);
     if (!expandedOltIds.includes(result.oltId)) {
       setExpandedOltIds(prev => [...prev, result.oltId]);
     }
 
-    // Construir la ruta de la caja encontrada para mostrar en el breadcrumb
     const targetOlt = olts.find(o => o.id === result.oltId);
     const targetPon = targetOlt?.ponPorts.find(p => p.id === result.ponId);
 
     if (targetPon?.primaryBox) {
       const pathSteps: BreadcrumbStep[] = [];
-      const findPath = (node: FTTHNode, trail: BreadcrumbStep[]): boolean => {
+      const nodeIdsToExpand = new Set<string>();
+
+      const findPathAndExpand = (node: FTTHNode, trail: BreadcrumbStep[]): boolean => {
         const currentTrail = [...trail, { id: node.id, name: node.name, type: node.type, portUsed: node.parentPortIndex, location: node.location }];
         if (node.id === result.boxId) {
           pathSteps.push(...currentTrail);
+          trail.forEach(t => nodeIdsToExpand.add(t.id));
           return true;
         }
         for (const child of node.children || []) {
-          if (findPath(child, currentTrail)) return true;
+          if (findPathAndExpand(child, currentTrail)) {
+            nodeIdsToExpand.add(node.id);
+            return true;
+          }
         }
         return false;
       };
 
-      findPath(targetPon.primaryBox, []);
+      findPathAndExpand(targetPon.primaryBox, []);
+
+      // Aplicar expansión a todas las cajas de la ruta
+      const expandNodesInTree = (node: FTTHNode): FTTHNode => {
+        const shouldBeOpen = nodeIdsToExpand.has(node.id) ? false : node.isCollapsed;
+        return {
+          ...node,
+          isCollapsed: shouldBeOpen,
+          children: (node.children || []).map(expandNodesInTree)
+        };
+      };
+
+      const expandedTree = expandNodesInTree(targetPon.primaryBox);
+
+      // Guardar el árbol con las ramas abiertas
+      setOlts(prev =>
+        prev.map(o => {
+          if (o.id === result.oltId) {
+            return {
+              ...o,
+              ponPorts: o.ponPorts.map(p => p.id === result.ponId ? { ...p, primaryBox: expandedTree } : p)
+            };
+          }
+          return o;
+        })
+      );
+
       setSelectedBoxId(result.boxId);
       setBreadcrumbSteps(pathSteps);
     }
@@ -309,18 +368,12 @@ export function App() {
           </div>
         </div>
 
-        {/* Acciones principales y Buscador */}
-        <div className="flex items-center gap-2">
-          {/* Botón Buscador Global */}
-          <button
-            onClick={() => setIsSearchModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-medium text-slate-300 flex items-center gap-1.5 transition"
-            title="Buscar cualquier caja en la red"
-          >
-            <Search className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Buscar Caja...</span>
-            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-500 font-mono">/</span>
-          </button>
+        {/* Buscador Dropdown integrado y acciones */}
+        <div className="flex items-center gap-3">
+          <DropdownSearchBar
+            olts={olts}
+            onSelectResult={handleSelectSearchResult}
+          />
 
           <div className="h-4 w-[1px] bg-slate-800" />
 
@@ -357,7 +410,6 @@ export function App() {
 
       {/* Main Container */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Sidebar OLTs */}
         <OLTListSidebar
           olts={olts}
           selectedOltId={selectedOltId}
@@ -366,14 +418,14 @@ export function App() {
           onToggleExpandOlt={handleToggleExpandOlt}
           onSelectPon={handleSelectPon}
           onOpenCreateOltModal={() => setIsCreateOltModalOpen(true)}
+          onOpenEditOltModal={(olt) => setEditingOlt(olt)}
+          onAddPonDirect={handleAddPonDirect}
           onDeleteOlt={handleDeleteOlt}
         />
 
-        {/* Lienzo y Barra de Ruta de Fibra */}
         <main className="flex-1 relative overflow-hidden bg-[#0b0f19] flex flex-col p-4">
           {currentPon ? (
             <>
-              {/* Barra Superior de Muestreo / Ruta Jerárquica */}
               <HierarchyBreadcrumbBar
                 oltName={currentOlt?.name || 'OLT'}
                 ponName={currentPon.name}
@@ -381,7 +433,6 @@ export function App() {
                 steps={breadcrumbSteps}
               />
 
-              {/* Cuadro Sinóptico de Llaves */}
               <div className="flex-1 relative overflow-hidden rounded-xl border border-slate-800/60 bg-[#0b0f19]/80">
                 <SynopticTreeCanvas
                   pon={currentPon}
@@ -404,7 +455,6 @@ export function App() {
         </main>
       </div>
 
-      {/* Modal Crear OLT */}
       {isCreateOltModalOpen && (
         <CreateOLTModal
           onClose={() => setIsCreateOltModalOpen(false)}
@@ -412,21 +462,19 @@ export function App() {
         />
       )}
 
-      {/* Modal Editar Caja */}
+      {editingOlt && (
+        <EditOLTModal
+          olt={editingOlt}
+          onClose={() => setEditingOlt(null)}
+          onSave={handleSaveEditedOlt}
+        />
+      )}
+
       {editingNode && (
         <EditBoxModal
           node={editingNode}
           onClose={() => setEditingNode(null)}
           onSave={handleSaveEditedBox}
-        />
-      )}
-
-      {/* Modal Buscador de Cajas */}
-      {isSearchModalOpen && (
-        <BoxSearchModal
-          olts={olts}
-          onClose={() => setIsSearchModalOpen(false)}
-          onSelectResult={handleSelectSearchResult}
         />
       )}
     </div>
