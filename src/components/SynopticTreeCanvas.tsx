@@ -36,7 +36,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   onOpenEditBoxModal,
   simulationData,
 }) => {
-  const simActive = !!simulationData;
   const primaryBox = pon.primaryBox;
 
   const primaryBracketRef = useRef<HTMLDivElement>(null);

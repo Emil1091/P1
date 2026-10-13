@@ -91,28 +91,35 @@ export function calculateBoxStatus(clients: SimulatedClient[]): BoxSignalStatus 
 
 /**
  * Calcula el estado de una caja "padre" (primaria/secundaria) basándose
- * en el peor estado de todas las NAPs descendientes.
+ * en el estado de TODAS sus salidas ocupadas (cajas hijas directas):
+ * - Solo se marca como atenuada si TODAS las salidas existentes están
+ *   degradadas (estado ≠ normal).
+ * - Con menos de 2 ramas instaladas nunca se marca: si una única rama
+ *   está degradada, no debe afectar al nivel anterior (evita falsas alarmas).
+ * - El estado final es el peor entre las salidas: offline > critical > warning.
  */
 export function calculateParentStatus(
   node: FTTHNode,
   simData: SimulationData
 ): BoxSignalStatus {
-  const statuses: BoxSignalStatus[] = [];
+  const branches = node.children ?? [];
 
-  const collect = (n: FTTHNode) => {
-    if (n.type === 'caja_nap') {
-      const clients = simData[n.id];
-      if (clients) statuses.push(calculateBoxStatus(clients));
-    }
-    for (const child of n.children ?? []) collect(child);
-  };
+  // Una sola rama (o ninguna) no alcanza para marcar al nivel padre
+  if (branches.length < 2) return 'normal';
 
-  collect(node);
+  const statuses = branches.map((branch) =>
+    branch.type === 'caja_nap'
+      ? calculateBoxStatus(simData[branch.id] ?? [])
+      : calculateParentStatus(branch, simData)
+  );
 
-  if (statuses.length === 0) return 'normal';
-  if (statuses.every(s => s === 'offline')) return 'offline';
-  if (statuses.some(s => s === 'critical')) return 'critical';
-  if (statuses.some(s => s === 'warning'))  return 'warning';
+  // Todas las salidas ocupadas deben estar atenuadas
+  if (!statuses.every((s) => s !== 'normal')) return 'normal';
+
+  if (statuses.includes('offline')) return 'offline';
+  if (statuses.includes('critical')) return 'critical';
+  if (statuses.includes('warning'))  return 'warning';
+
   return 'normal';
 }
 
