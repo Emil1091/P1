@@ -1,16 +1,15 @@
-import type { DiagramNode, SplitterRatio } from '../types/ftth';
+import type { FTTHNode, SplitterRatio } from '../types/ftth';
 
 /**
- * Atenuación nominal teórica según ratio del Splitter PLC:
- * 1:2 -> 3.5 dB
- * 1:4 -> 7.0 dB
- * 1:8 -> 10.5 dB
+ * Atenuación estándar de Splitters Balanceados PLC:
+ * 1:2  -> 3.5 dB
+ * 1:4  -> 7.0 dB
+ * 1:8  -> 10.5 dB
  * 1:16 -> 14.0 dB
  * 1:32 -> 17.5 dB
  * 1:64 -> 21.0 dB
  */
 export const SPLITTER_LOSS: Record<SplitterRatio, number> = {
-  1: 0.2, // acoplador pasante directo
   2: 3.5,
   4: 7.0,
   8: 10.5,
@@ -19,8 +18,8 @@ export const SPLITTER_LOSS: Record<SplitterRatio, number> = {
   64: 21.0,
 };
 
-export const SPLICE_LOSS = 0.1; // Pérdida media por fusión (dB)
-export const CONNECTOR_LOSS = 0.4; // Pérdida media por conector SC/APC (dB)
+export const CONNECTOR_LOSS = 0.35; // Pérdida típica por conector SC/APC (dB)
+export const SPLICE_LOSS = 0.08;    // Pérdida por fusión (dB)
 
 export interface OpticalStatus {
   status: 'optimal' | 'warning' | 'critical' | 'dead';
@@ -30,10 +29,6 @@ export interface OpticalStatus {
   label: string;
 }
 
-/**
- * Evalúa el nivel de señal óptica (dBm) en función de la sensibilidad de una ONT/Cliente
- * Rango operativo estándar: -8.0 dBm a -27.0 dBm
- */
 export function evaluatePowerLevel(power: number | undefined): OpticalStatus {
   if (power === undefined || isNaN(power)) {
     return {
@@ -53,13 +48,13 @@ export function evaluatePowerLevel(power: number | undefined): OpticalStatus {
       badgeText: 'text-yellow-400',
       label: 'Saturado (> -8 dBm)'
     };
-  } else if (power >= -24.0) {
+  } else if (power >= -23.5) {
     return {
       status: 'optimal',
       color: '#22c55e',
       badgeBg: 'bg-emerald-950/80 border-emerald-700/50',
       badgeText: 'text-emerald-400',
-      label: 'Óptima'
+      label: 'Excelente'
     };
   } else if (power >= -27.0) {
     return {
@@ -67,7 +62,7 @@ export function evaluatePowerLevel(power: number | undefined): OpticalStatus {
       color: '#f97316',
       badgeBg: 'bg-orange-950/80 border-orange-700/50',
       badgeText: 'text-orange-400',
-      label: 'Límite (-24 a -27 dBm)'
+      label: 'Aceptable (-23.5 a -27 dBm)'
     };
   } else {
     return {
@@ -81,45 +76,23 @@ export function evaluatePowerLevel(power: number | undefined): OpticalStatus {
 }
 
 /**
- * Motor de cálculo recursivo de potencias ópticas en cascada.
+ * Recorre recursivamente las cajas FTTH calculando la potencia óptica de entrada y de salida
  */
-export function calculateOpticalPowers(rootNode: DiagramNode): DiagramNode {
-  function traverse(node: DiagramNode, parentPower: number | undefined): DiagramNode {
-    let currentPower = parentPower;
+export function calculateFTTHPowers(node: FTTHNode, inputPower: number): FTTHNode {
+  const ratio = node.ratio || 4;
+  const splitLoss = SPLITTER_LOSS[ratio] || 7.0;
+  // Pérdida total en la caja: splitter + conectores/fusiones
+  const boxInsertionLoss = splitLoss + (CONNECTOR_LOSS * 2);
+  const outputPower = Number((inputPower - boxInsertionLoss).toFixed(2));
 
-    if (node.type === 'olt' || node.type === 'pon') {
-      currentPower = node.power !== undefined ? node.power : 4.5;
-    } else if (parentPower !== undefined) {
-      let loss = 0;
+  const calculatedChildren = (node.children || []).map(child => {
+    return calculateFTTHPowers(child, outputPower);
+  });
 
-      if (node.type === 'splitter' && node.ratio) {
-        loss += (SPLITTER_LOSS[node.ratio] || 3.5) + CONNECTOR_LOSS;
-      } else if (node.type === 'nap') {
-        if (node.ratio) {
-          loss += (SPLITTER_LOSS[node.ratio] || 10.5) + (CONNECTOR_LOSS * 2);
-        } else {
-          loss += 0.3;
-        }
-      } else if (node.type === 'mufa') {
-        const spliceCount = node.splices?.length || 1;
-        loss += (spliceCount * SPLICE_LOSS);
-      } else if (node.type === 'client') {
-        loss += CONNECTOR_LOSS;
-      } else {
-        loss += 0.2;
-      }
-
-      currentPower = Number((parentPower - loss).toFixed(2));
-    }
-
-    const calculatedChildren = (node.children || []).map((child) => traverse(child, currentPower));
-
-    return {
-      ...node,
-      power: currentPower,
-      children: calculatedChildren,
-    };
-  }
-
-  return traverse(rootNode, rootNode.power !== undefined ? rootNode.power : 4.5);
+  return {
+    ...node,
+    powerInput: Number(inputPower.toFixed(2)),
+    powerOutput: outputPower,
+    children: calculatedChildren
+  };
 }

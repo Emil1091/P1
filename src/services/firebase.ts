@@ -3,7 +3,7 @@ import type { FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, Firestore } from 'firebase/firestore';
-import type { DiagramNode } from '../types/ftth';
+import type { OLTDevice } from '../types/ftth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyMockApiKey_DemoPurposeOnly_FtthApp",
@@ -46,23 +46,23 @@ export async function logoutUser(): Promise<void> {
   await signOut(auth);
 }
 
-export async function saveProjectToFirestore(userId: string, root: DiagramNode, projectName = "FTTH Proyecto Principal") {
+export async function saveProjectToFirestore(userId: string, olts: OLTDevice[], projectName = "FTTH OLTs") {
   if (!db) throw new Error("Firestore no disponible");
   const projectRef = doc(db, 'projects', userId);
   await setDoc(projectRef, {
     projectName,
     updatedAt: new Date().toISOString(),
-    data: root
+    data: olts
   }, { merge: true });
 }
 
-export async function loadProjectFromFirestore(userId: string): Promise<DiagramNode | null> {
+export async function loadProjectFromFirestore(userId: string): Promise<OLTDevice[] | null> {
   if (!db) return null;
   const projectRef = doc(db, 'projects', userId);
   const snap = await getDoc(projectRef);
   if (snap.exists()) {
     const data = snap.data();
-    return data.data as DiagramNode;
+    return data.data as OLTDevice[];
   }
   return null;
 }

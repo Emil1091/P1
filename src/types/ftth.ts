@@ -1,38 +1,39 @@
-export type NodeType = 'olt' | 'pon' | 'splitter' | 'nap' | 'client' | 'port' | 'mufa';
-export type SplitterRatio = 1 | 2 | 4 | 8 | 16 | 32 | 64;
+export type NodeType = 'olt' | 'pon' | 'caja_primaria' | 'caja_secundaria' | 'caja_nap' | 'client';
+export type SplitterRatio = 2 | 4 | 8 | 16 | 32 | 64;
 
-export interface SpliceConnection {
-  from: number | string; // e.g. fiber number or splitter output "S1:out:2"
-  to: string; // destination node ID or "out"
-  toFiber: number; // destination fiber index
+export interface SplitterOutputPort {
+  portNumber: number;
+  label?: string;
+  connectedNodeId?: string; // ID de la caja hija conectada
 }
 
-export interface DiagramNode {
+export interface FTTHNode {
   id: string;
   name: string;
   type: NodeType;
-  ratio?: SplitterRatio;
+  ratio?: SplitterRatio; // e.g. 4 para 1x4, 8 para 1x8
+  powerInput?: number;   // dBm a la entrada de la caja
+  powerOutput?: number;  // dBm a la salida de cada puerto del splitter
+  location?: string;     // Poste, Cámara o Calle
+  children: FTTHNode[];  // Cajas hijas conectadas a las salidas
+  parentPortIndex?: number; // Cuál salida del padre ocupa (1, 2, 3...)
   isCollapsed?: boolean;
-  power?: number; // dBm calculado o base
-  position?: { x: number; y: number };
-  fibers?: number; // Capacidad de hilos del equipo (ej. 12, 24, 48)
-  cableFibers?: number; // Hilos del cable entrante/saliente
-  splices?: SpliceConnection[]; // Mapeo de fusiones
-  children: DiagramNode[];
 }
 
-export interface InternalSplitter {
+export interface PONPort {
   id: string;
-  name: string;
-  ratio: SplitterRatio;
-  inputFiber?: number; // Hilo de entrada conectado
+  name: string; // ej. "PON 01", "PON 02"
+  slotPort: string; // ej. "0/1/1"
+  txPower: number; // dBm inicial (+4.5 a +5.0)
+  primaryBox?: FTTHNode; // Caja primaria conectada al PON
 }
 
-export interface NetworkProject {
+export interface OLTDevice {
   id: string;
-  name: string;
-  updatedAt: string;
-  root: DiagramNode;
+  name: string; // ej. "OLT Central - ZTE C320"
+  location: string; // ej. "Cabecera Central"
+  portsCount: number; // ej. 8 o 16 puertos
+  ponPorts: PONPort[];
 }
 
 // Código estándar de colores TIA-598 (12 colores)
