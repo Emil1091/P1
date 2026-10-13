@@ -6,73 +6,90 @@ import {
   Trash2
 } from 'lucide-react';
 import type { OLTDevice, FTTHNode } from './types/ftth';
-import { calculateFTTHPowers } from './utils/opticalBudget';
 import { OLTListSidebar } from './components/OLTListSidebar';
-import { TreeBracketCanvas } from './components/TreeBracketCanvas';
+import { SynopticTreeCanvas } from './components/SynopticTreeCanvas';
+import { CreateOLTModal } from './components/CreateOLTModal';
 
-// Proyecto base inicial con OLT de ejemplo y topología 1x4 + 1x4 + 1x8
+// Inicialización de OLT con bandejas y topología 1x4 + 1x4 + 1x8
 const initialOLTs: OLTDevice[] = [
   {
     id: 'olt-1',
-    name: 'OLT Central - Huawei MA5800',
-    location: 'Cabecera Central / Sala TI',
-    portsCount: 8,
+    name: 'OLT Central',
+    brand: 'Huawei',
+    model: 'MA5800-X7',
+    chassisType: 'modular',
+    slotsCount: 2,
+    portsPerSlot: 8,
     ponPorts: [
       {
-        id: 'pon-1-1',
-        name: 'PON 01',
+        id: 'pon-1-1-1',
+        name: 'S1-PON01',
+        slotIndex: 1,
+        portIndex: 1,
         slotPort: '0/1/1',
-        txPower: 4.8,
         primaryBox: {
           id: 'pri-01',
-          name: 'Caja Primaria 01',
+          name: 'Caja Primaria 1x4',
           type: 'caja_primaria',
           ratio: 4,
-          location: 'Cámara Subterránea 01',
+          isCollapsed: false,
           children: [
             {
               id: 'sec-01',
-              name: 'Caja Secundario 01',
+              name: 'Secundario #1 (1x4)',
               type: 'caja_secundaria',
               ratio: 4,
               parentPortIndex: 1,
-              location: 'Poste 12 - Av. San Martín',
+              isCollapsed: false,
               children: [
                 {
                   id: 'nap-01',
-                  name: 'Caja NAP 01',
+                  name: 'NAP #1 (1x8)',
                   type: 'caja_nap',
                   ratio: 8,
                   parentPortIndex: 1,
-                  location: 'Poste 14 - Esquina Mitre',
                   children: []
                 },
                 {
                   id: 'nap-02',
-                  name: 'Caja NAP 02',
+                  name: 'NAP #2 (1x8)',
                   type: 'caja_nap',
                   ratio: 8,
                   parentPortIndex: 2,
-                  location: 'Poste 16 - Calle Belgrano',
+                  children: []
+                },
+                {
+                  id: 'nap-03',
+                  name: 'NAP #3 (1x8)',
+                  type: 'caja_nap',
+                  ratio: 8,
+                  parentPortIndex: 3,
+                  children: []
+                },
+                {
+                  id: 'nap-04',
+                  name: 'NAP #4 (1x8)',
+                  type: 'caja_nap',
+                  ratio: 8,
+                  parentPortIndex: 4,
                   children: []
                 }
               ]
             },
             {
               id: 'sec-02',
-              name: 'Caja Secundario 02',
+              name: 'Secundario #2 (1x4)',
               type: 'caja_secundaria',
               ratio: 4,
               parentPortIndex: 2,
-              location: 'Poste 24 - Barrio Norte',
+              isCollapsed: true,
               children: [
                 {
-                  id: 'nap-03',
-                  name: 'Caja NAP 01',
+                  id: 'nap-05',
+                  name: 'NAP #1 (1x8)',
                   type: 'caja_nap',
                   ratio: 8,
                   parentPortIndex: 1,
-                  location: 'Poste 26 - Pasaje Los Álamos',
                   children: []
                 }
               ]
@@ -81,61 +98,54 @@ const initialOLTs: OLTDevice[] = [
         }
       },
       {
-        id: 'pon-1-2',
-        name: 'PON 02',
+        id: 'pon-1-1-2',
+        name: 'S1-PON02',
+        slotIndex: 1,
+        portIndex: 2,
         slotPort: '0/1/2',
-        txPower: 4.8,
       },
       {
-        id: 'pon-1-3',
-        name: 'PON 03',
+        id: 'pon-1-1-3',
+        name: 'S1-PON03',
+        slotIndex: 1,
+        portIndex: 3,
         slotPort: '0/1/3',
-        txPower: 4.8,
       },
       {
-        id: 'pon-1-4',
-        name: 'PON 04',
-        slotPort: '0/1/4',
-        txPower: 4.8,
+        id: 'pon-1-2-1',
+        name: 'S2-PON01',
+        slotIndex: 2,
+        portIndex: 1,
+        slotPort: '0/2/1',
       }
     ]
   },
   {
     id: 'olt-2',
-    name: 'OLT Nodo Norte - ZTE C320',
-    location: 'Pop Norte / Nodo Distribuidor',
-    portsCount: 4,
+    name: 'OLT Pop Norte',
+    brand: 'ZTE',
+    model: 'C320',
+    chassisType: 'modular',
+    slotsCount: 2,
+    portsPerSlot: 4,
     ponPorts: [
       {
-        id: 'pon-2-1',
-        name: 'PON 01',
+        id: 'pon-2-1-1',
+        name: 'S1-PON01',
+        slotIndex: 1,
+        portIndex: 1,
         slotPort: '0/1/1',
-        txPower: 5.0,
-      },
-      {
-        id: 'pon-2-2',
-        name: 'PON 02',
-        slotPort: '0/1/2',
-        txPower: 5.0,
       }
     ]
   }
 ];
 
 export function App() {
-  const [olts, setOlts] = useState<OLTDevice[]>(() => {
-    return initialOLTs.map(olt => ({
-      ...olt,
-      ponPorts: olt.ponPorts.map(pon => ({
-        ...pon,
-        primaryBox: pon.primaryBox ? calculateFTTHPowers(pon.primaryBox, pon.txPower) : undefined
-      }))
-    }));
-  });
-
+  const [olts, setOlts] = useState<OLTDevice[]>(initialOLTs);
   const [selectedOltId, setSelectedOltId] = useState<string | null>('olt-1');
-  const [selectedPonId, setSelectedPonId] = useState<string | null>('pon-1-1');
+  const [selectedPonId, setSelectedPonId] = useState<string | null>('pon-1-1-1');
   const [expandedOltIds, setExpandedOltIds] = useState<string[]>(['olt-1']);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const currentOlt = olts.find(o => o.id === selectedOltId) || olts[0];
   const currentPon = currentOlt?.ponPorts.find(p => p.id === selectedPonId) || currentOlt?.ponPorts[0];
@@ -154,43 +164,22 @@ export function App() {
     }
   };
 
-  const handleAddOlt = () => {
-    const oltNum = olts.length + 1;
-    const newOlt: OLTDevice = {
-      id: `olt-${Date.now().toString().slice(-4)}`,
-      name: `OLT Nodo ${oltNum}`,
-      location: `Cabecera ${oltNum}`,
-      portsCount: 4,
-      ponPorts: [
-        { id: `pon-${Date.now()}-1`, name: 'PON 01', slotPort: '0/1/1', txPower: 4.8 },
-        { id: `pon-${Date.now()}-2`, name: 'PON 02', slotPort: '0/1/2', txPower: 4.8 },
-      ]
-    };
+  const handleCreateOlt = (newOlt: OLTDevice) => {
     setOlts(prev => [...prev, newOlt]);
     setSelectedOltId(newOlt.id);
-    setSelectedPonId(newOlt.ponPorts[0].id);
+    setSelectedPonId(newOlt.ponPorts[0]?.id || null);
     setExpandedOltIds(prev => [...prev, newOlt.id]);
   };
 
-  const handleAddPon = (oltId: string) => {
-    setOlts(prev =>
-      prev.map(olt => {
-        if (olt.id === oltId) {
-          const nextIndex = olt.ponPorts.length + 1;
-          const newPon = {
-            id: `pon-${olt.id}-${nextIndex}`,
-            name: `PON 0${nextIndex}`,
-            slotPort: `0/1/${nextIndex}`,
-            txPower: 4.8,
-          };
-          return {
-            ...olt,
-            ponPorts: [...olt.ponPorts, newPon]
-          };
-        }
-        return olt;
-      })
-    );
+  const handleDeleteOlt = (oltId: string) => {
+    setOlts(prev => {
+      const filtered = prev.filter(o => o.id !== oltId);
+      if (filtered[0]) {
+        setSelectedOltId(filtered[0].id);
+        setSelectedPonId(filtered[0].ponPorts[0]?.id || null);
+      }
+      return filtered;
+    });
   };
 
   const handleUpdatePrimaryBox = (updatedBox: FTTHNode | undefined) => {
@@ -203,12 +192,9 @@ export function App() {
             ...olt,
             ponPorts: olt.ponPorts.map(pon => {
               if (pon.id === selectedPonId) {
-                const calculated = updatedBox
-                  ? calculateFTTHPowers(updatedBox, pon.txPower)
-                  : undefined;
                 return {
                   ...pon,
-                  primaryBox: calculated
+                  primaryBox: updatedBox
                 };
               }
               return pon;
@@ -233,7 +219,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `FTTH-OLTs-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `FTTH-OLTs-Sinoptico-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -263,57 +249,57 @@ export function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#090d16] text-slate-100 overflow-hidden font-sans">
-      <header className="h-14 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 flex items-center justify-between z-30 select-none">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-600 to-sky-500 shadow-lg shadow-indigo-500/20">
-            <Network className="w-5 h-5 text-white" />
+      {/* Header */}
+      <header className="h-12 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 flex items-center justify-between z-30 select-none flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 shadow-sm">
+            <Network className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-              FTTH Tree Topology Designer
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                1x4 + 1x4 + 1x8
-              </span>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xs font-bold text-white tracking-tight">
+              FTTH Diagrama de Llaves
             </h1>
-            <p className="text-[11px] text-slate-400">
-              Diseño jerárquico balanceado por OLT y puertos PON con validación física de puertos
-            </p>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              1x4 + 1x4 + 1x8
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleClearCurrentPon}
-            className="px-3 py-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-xs font-semibold text-red-300 hover:text-red-100 flex items-center gap-1.5 transition shadow-sm"
+            className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-800/50 text-[11px] font-semibold text-red-300 hover:text-red-100 flex items-center gap-1 transition"
             title="Borrar todo el árbol del PON actual"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3 h-3" />
             <span>Borrar PON</span>
           </button>
 
-          <div className="h-5 w-[1px] bg-slate-800" />
+          <div className="h-4 w-[1px] bg-slate-800" />
 
           <label
-            className="cursor-pointer px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition"
+            className="cursor-pointer px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-semibold text-slate-300 flex items-center gap-1 transition"
             title="Importar proyecto JSON"
           >
-            <Upload className="w-3.5 h-3.5" />
+            <Upload className="w-3 h-3" />
             <span>Importar</span>
             <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
           </label>
 
           <button
             onClick={handleExportJSON}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition"
+            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-semibold text-slate-300 flex items-center gap-1 transition"
             title="Descargar proyecto en JSON"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3 h-3" />
             <span>Exportar JSON</span>
           </button>
         </div>
       </header>
 
+      {/* Main Container */}
       <div className="flex flex-1 overflow-hidden relative">
+        {/* Sidebar OLTs con bandejas */}
         <OLTListSidebar
           olts={olts}
           selectedOltId={selectedOltId}
@@ -321,23 +307,32 @@ export function App() {
           expandedOltIds={expandedOltIds}
           onToggleExpandOlt={handleToggleExpandOlt}
           onSelectPon={handleSelectPon}
-          onAddOlt={handleAddOlt}
-          onAddPon={handleAddPon}
+          onOpenCreateOltModal={() => setIsCreateModalOpen(true)}
+          onDeleteOlt={handleDeleteOlt}
         />
 
-        <main className="flex-1 relative overflow-hidden bg-[#090d16]">
+        {/* Lienzo del Cuadro Sinóptico de Llaves */}
+        <main className="flex-1 relative overflow-hidden bg-[#0b0f19]">
           {currentPon ? (
-            <TreeBracketCanvas
+            <SynopticTreeCanvas
               pon={currentPon}
               onUpdatePrimaryBox={handleUpdatePrimaryBox}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-slate-500 text-sm">
-              Selecciona un puerto PON del panel izquierdo para visualizar su árbol de red.
+            <div className="flex items-center justify-center h-full text-slate-500 text-xs">
+              Selecciona un puerto PON del panel izquierdo para desplegar su cuadro sinóptico.
             </div>
           )}
         </main>
       </div>
+
+      {/* Modal Crear OLT */}
+      {isCreateModalOpen && (
+        <CreateOLTModal
+          onClose={() => setIsCreateModalOpen(false)}
+          onSave={handleCreateOlt}
+        />
+      )}
     </div>
   );
 }
