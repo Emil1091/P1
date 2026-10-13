@@ -182,6 +182,11 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
     }
   }, [primaryBox]);
 
+  // ─── Datos de simulación pre-calculados para el render ────────────────────
+  const priSim = primaryBox && simulationData
+    ? { status: calculateParentStatus(primaryBox, simulationData), cfg: STATUS_COLORS[calculateParentStatus(primaryBox, simulationData)] }
+    : null;
+
   return (
     <div className="w-full h-full overflow-x-auto overflow-y-auto bg-[#0b0f19] p-6 select-none flex flex-col justify-start">
       {/* Barra de cabecera */}
@@ -280,10 +285,6 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
         {/* NIVEL 2: CAJA PRIMARIA */}
         {primaryBox && (
           <div className="flex items-center gap-1">
-            {(() => {
-              const priStatus = simActive ? calculateParentStatus(primaryBox, simulationData!) : null;
-              const priSimCfg = priStatus ? STATUS_COLORS[priStatus] : null;
-              return (
             <div
               ref={selectedBoxId === primaryBox.id ? selectedNodeRef : undefined}
               onClick={() => {
@@ -294,8 +295,8 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
               className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 cursor-pointer transition-all duration-200 ${
                 selectedBoxId === primaryBox.id
                   ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
-                  : simActive && priSimCfg
-                  ? `${priSimCfg.border} ${priSimCfg.bg}`
+                  : priSim && priSim.status !== 'normal'
+                  ? `${priSim.cfg.border} ${priSim.cfg.bg}`
                   : 'border-indigo-500/40 hover:border-indigo-400'
               }`}
             >
@@ -345,14 +346,12 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
               >
                 <Trash2 className="w-3 h-3" />
               </button>
-              {/* Badge de simulación en caja primaria */}
-              {simActive && priSimCfg && priStatus !== 'normal' && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ml-1 ${priSimCfg.badge}`}>
-                  {priSimCfg.label}
+              {priSim && priSim.status !== 'normal' && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ml-1 ${priSim.cfg.badge}`}>
+                  {priSim.cfg.label}
                 </span>
               )}
             </div>
-            );})()}
 
             {/* Llave hacia Secundarios */}
             {!primaryBox.isCollapsed && (
@@ -373,12 +372,15 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                     const portNum = secIdx + 1;
                     const secNode = primaryBox.children.find(c => c.parentPortIndex === portNum);
 
+                    // Simulación para secundario
+                    const secStatus = secNode && simulationData
+                      ? calculateParentStatus(secNode, simulationData)
+                      : null;
+                    const secSimCfg = secStatus ? STATUS_COLORS[secStatus] : null;
+
                     return (
                       <div key={`sec-slot-${portNum}`} className="flex items-center gap-1">
-                        {secNode ? (() => {
-                          const secStatus = simActive ? calculateParentStatus(secNode, simulationData!) : null;
-                          const secSimCfg = secStatus ? STATUS_COLORS[secStatus] : null;
-                          return (
+                        {secNode ? (
                           <div className="flex items-center gap-1">
                             <div
                               ref={selectedBoxId === secNode.id ? selectedNodeRef : undefined}
@@ -391,7 +393,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                               className={`px-2.5 py-1.5 rounded-lg bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
                                 selectedBoxId === secNode.id
                                   ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
-                                  : simActive && secSimCfg
+                                  : secSimCfg && secStatus !== 'normal'
                                   ? `${secSimCfg.border} ${secSimCfg.bg}`
                                   : 'border-sky-500/40 hover:border-sky-400'
                               }`}
@@ -444,8 +446,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                               >
                                 <Trash2 className="w-2.5 h-2.5" />
                               </button>
-                              {/* Badge simulación secundario */}
-                              {simActive && secSimCfg && secStatus !== 'normal' && (
+                              {secSimCfg && secStatus !== 'normal' && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ml-1 ${secSimCfg.badge}`}>
                                   {secSimCfg.label}
                                 </span>
@@ -470,14 +471,19 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                       c => c.parentPortIndex === napPortNum
                                     );
 
+                                    // Simulación para NAP
+                                    const napClients = napNode && simulationData
+                                      ? (simulationData[napNode.id] ?? [])
+                                      : [];
+                                    const napStatus = napNode && simulationData
+                                      ? calculateBoxStatus(napClients)
+                                      : null;
+                                    const napSimCfg = napStatus ? STATUS_COLORS[napStatus] : null;
+                                    const napAvg = napClients.length > 0 ? averageSignal(napClients) : null;
+
                                     return (
                                       <div key={`nap-slot-${secNode.id}-${napPortNum}`} className="flex items-center gap-1">
-                                        {napNode ? (() => {
-                                          const napClients = simActive ? (simulationData![napNode.id] ?? []) : [];
-                                          const napStatus = simActive ? calculateBoxStatus(napClients) : null;
-                                          const napSimCfg = napStatus ? STATUS_COLORS[napStatus] : null;
-                                          const napAvg = simActive && napClients.length > 0 ? averageSignal(napClients) : null;
-                                          return (
+                                        {napNode ? (
                                           <div
                                             ref={selectedBoxId === napNode.id ? selectedNodeRef : undefined}
                                             onClick={() => {
@@ -490,12 +496,12 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                             className={`px-2 py-1 rounded-md bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
                                               selectedBoxId === napNode.id
                                                 ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
-                                                : simActive && napSimCfg
+                                                : napSimCfg && napStatus !== 'normal'
                                                 ? `${napSimCfg.border} ${napSimCfg.bg}`
                                                 : 'border-emerald-500/40 hover:border-emerald-400'
                                             }`}
                                           >
-                                            <Radio className={`w-3 h-3 flex-shrink-0 ${simActive && napSimCfg ? napSimCfg.dot.replace('bg-', 'text-') : 'text-emerald-400'}`} />
+                                            <Radio className={`w-3 h-3 flex-shrink-0 ${napSimCfg ? napSimCfg.dot.replace('bg-', 'text-') : 'text-emerald-400'}`} />
                                             <div className="text-left">
                                               <span className="text-[10px] font-bold text-slate-200 block truncate">
                                                 {napNode.name}
@@ -509,8 +515,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                                 )}
                                               </div>
                                             </div>
-                                            {/* Badge de señal NAP */}
-                                            {simActive && napSimCfg && (
+                                            {napSimCfg && (
                                               <div className="flex flex-col items-end gap-0.5 ml-1">
                                                 <span className={`px-1 py-0.5 rounded-full text-[8px] font-bold ${napSimCfg.badge}`}>
                                                   {napSimCfg.label}
@@ -541,8 +546,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                               <Trash2 className="w-2.5 h-2.5" />
                                             </button>
                                           </div>
-                                          );
-                                        })() : (
+                                        ) : (
                                           addingParentInfo?.parentId === secNode.id && addingParentInfo.portIndex === napPortNum ? (
                                             <div className="flex items-center gap-1 p-0.5 rounded bg-slate-900 border border-emerald-500/50 text-[10px]">
                                               <select
@@ -588,8 +592,7 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                               </div>
                             )}
                           </div>
-                          );
-                        })() : (
+                        ) : (
                           addingParentInfo?.parentId === primaryBox.id && addingParentInfo.portIndex === portNum ? (
                             <div className="flex items-center gap-1 p-1 rounded bg-slate-900 border border-sky-500/50 text-xs">
                               <select
