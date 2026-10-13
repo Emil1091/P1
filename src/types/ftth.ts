@@ -42,3 +42,25 @@ export interface BreadcrumbStep {
   portUsed?: number;
   location?: string;
 }
+
+// ─── Módulo de Simulación de Atenuación ───────────────────────────────────────
+
+/** Estado de señal de una ONU/cliente individual */
+export interface SimulatedClient {
+  id: string;
+  name: string;       // ej. "ONU-01"
+  signal: number;     // dBm, ej. -24.5
+  isOnline: boolean;  // false = sin señal (offline)
+}
+
+/**
+ * Estado de salud de la caja basado en los clientes simulados:
+ * - normal   → verde (señal aceptable)
+ * - warning  → amarillo (≥70% de clientes superan -27 dBm)
+ * - critical → naranja (≥70% de clientes superan -29 dBm)
+ * - offline  → rojo (todos los clientes están offline)
+ */
+export type BoxSignalStatus = 'normal' | 'warning' | 'critical' | 'offline';
+
+/** Mapa de datos simulados indexado por nodeId */
+export type SimulationData = Record<string, SimulatedClient[]>;

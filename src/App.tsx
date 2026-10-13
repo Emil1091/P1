@@ -5,7 +5,7 @@ import {
   Upload,
   Trash2
 } from 'lucide-react';
-import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort } from './types/ftth';
+import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort, SimulationData } from './types/ftth';
 import { OLTListSidebar } from './components/OLTListSidebar';
 import { SynopticTreeCanvas } from './components/SynopticTreeCanvas';
 import { CreateOLTModal } from './components/CreateOLTModal';
@@ -14,6 +14,8 @@ import { EditBoxModal } from './components/EditBoxModal';
 import { HierarchyBreadcrumbBar } from './components/HierarchyBreadcrumbBar';
 import { DropdownSearchBar } from './components/DropdownSearchBar';
 import type { SearchResultItem } from './components/DropdownSearchBar';
+import { SimulationPanel } from './components/SimulationPanel';
+import { generateSimulationData } from './utils/simulation';
 
 const STORAGE_KEY = 'ftth_designer_olts_v2';
 
@@ -116,6 +118,23 @@ export function App() {
   const [isCreateOltModalOpen, setIsCreateOltModalOpen] = useState(false);
   const [editingOlt, setEditingOlt] = useState<OLTDevice | null>(null);
   const [editingNode, setEditingNode] = useState<FTTHNode | null>(null);
+
+  // ─── Simulación de señal ────────────────────────────────────────────────────
+  const [isSimulationActive, setIsSimulationActive] = useState(false);
+  const [simulationData, setSimulationData] = useState<SimulationData>({});
+
+  const handleToggleSimulation = () => {
+    if (!isSimulationActive && currentPon?.primaryBox) {
+      setSimulationData(generateSimulationData(currentPon.primaryBox));
+    }
+    setIsSimulationActive(v => !v);
+  };
+
+  const handleRegenerateSimulation = () => {
+    if (currentPon?.primaryBox) {
+      setSimulationData(generateSimulationData(currentPon.primaryBox));
+    }
+  };
 
   // Selección de caja y barra de ruta de fibra
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>('nap-01');
@@ -423,7 +442,7 @@ export function App() {
           onDeleteOlt={handleDeleteOlt}
         />
 
-        <main className="flex-1 relative overflow-hidden bg-[#0b0f19] flex flex-col p-4">
+        <main className="flex-1 relative overflow-hidden bg-[#0b0f19] flex flex-col p-4 gap-3">
           {currentPon ? (
             <>
               <HierarchyBreadcrumbBar
@@ -431,6 +450,16 @@ export function App() {
                 ponName={currentPon.name}
                 slotPort={currentPon.slotPort}
                 steps={breadcrumbSteps}
+              />
+
+              {/* Panel de simulación de señal */}
+              <SimulationPanel
+                isActive={isSimulationActive}
+                onToggle={handleToggleSimulation}
+                onRegenerate={handleRegenerateSimulation}
+                simData={simulationData}
+                selectedBoxId={selectedBoxId}
+                selectedBoxName={breadcrumbSteps[breadcrumbSteps.length - 1]?.name}
               />
 
               <div className="flex-1 relative overflow-hidden rounded-xl border border-slate-800/60 bg-[#0b0f19]/80">
@@ -444,6 +473,7 @@ export function App() {
                   }}
                   onUpdatePrimaryBox={handleUpdatePrimaryBox}
                   onOpenEditBoxModal={(node) => setEditingNode(node)}
+                  simulationData={isSimulationActive ? simulationData : undefined}
                 />
               </div>
             </>
