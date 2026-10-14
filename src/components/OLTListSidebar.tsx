@@ -155,7 +155,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                   return bestRank;
                 };
                 const ra = rankOf(a), rb = rankOf(b);
-                if (ra !== rb) return ra - rb;
+                if (ra !== rb) return rb - ra;
                 return a.name.localeCompare(b.name);
               })
             : [...filteredOlts].sort((a, b) => a.name.localeCompare(b.name))
