@@ -94,16 +94,6 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
               Cabeceras OLT
             </h2>
             <p className="text-[10px] text-slate-500">{olts.length} equipos registrados</p>
-            {isSimulationActive && ponSimData && (
-              <p className="text-[9px] text-slate-400 mt-0.5">
-                Ordenadas por señal:{' '}
-                <span className="text-red-400 font-bold">off</span>
-                {' → '}
-                <span className="text-orange-400 font-bold">atenuadas</span>
-                {' → '}
-                <span className="text-slate-300">nombre</span>
-              </p>
-            )}
           </div>
         </div>
 
