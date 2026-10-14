@@ -11,7 +11,8 @@ import {
   Edit2,
   Activity,
   Search,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import type { OLTDevice, PONPort, BoxSignalStatus, SimulationData, FTTHNode } from '../types/ftth';
 import { calculateBoxStatus } from '../utils/simulation';
@@ -196,12 +197,18 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                         {olt.name}
                       </span>
                       {oltWorst !== 'normal' && (
-                        <span
-                          className={`text-base font-bold leading-none ${oltWorst === 'offline' ? 'text-red-500' : 'text-orange-400'} heartbeat`}
-                          title={oltWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}
-                        >
-                          !
-                        </span>
+                        oltWorst === 'offline' ? (
+                          <span
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-md bg-red-600 text-white heartbeat"
+                            title="Hay cajas sin señal (off)"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </span>
+                        ) : (
+                          <AlertTriangle
+                            className="w-4 h-4 text-amber-400 heartbeat"
+                                                      />
+                        )
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
@@ -313,7 +320,13 @@ const ponWorst: BoxSignalStatus = ponHealth(pon) as BoxSignalStatus;
                                     />
                                     <span className="truncate">{pon.name}</span>
 {ponWorst !== 'normal' && (
-  <span className={`text-[11px] font-bold leading-none ${ponWorst === 'offline' ? 'text-red-500' : 'text-orange-400'} heartbeat`} title={ponWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}>!</span>
+  ponWorst === 'offline' ? (
+    <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-md bg-red-600 text-white heartbeat ml-1" title="Hay cajas sin señal (off)">
+      <X className="w-2.5 h-2.5" />
+    </span>
+  ) : (
+    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 heartbeat ml-1"  />
+  )
 )}
                                     <span
                                       className={`text-[9px] font-mono px-1 rounded ${
