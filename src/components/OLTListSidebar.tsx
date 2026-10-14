@@ -11,8 +11,8 @@ import {
   Edit2,
   Activity
 } from 'lucide-react';
-import type { OLTDevice, PONPort, BoxSignalStatus, SimulationData } from '../types/ftth';
-import { calculateParentStatus } from '../utils/simulation';
+import type { OLTDevice, PONPort, BoxSignalStatus, SimulationData, FTTHNode } from '../types/ftth';
+import { calculateBoxStatus } from '../utils/simulation';
 
 interface OLTListSidebarProps {
   olts: OLTDevice[];
@@ -49,8 +49,32 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   simulationPanel,
 }) => {
   const [simOpen, setSimOpen] = useState(false);
+
+  // Salta la alerta con una sola caja atenuada/off, no espera a que se caiga el secundario
+  const ponHealth = (pon: PONPort): 'normal' | 'warning' | 'offline' => {
+    if (!isSimulationActive || !simulationData || !pon.primaryBox) return 'normal';
+    let off = false;
+    let atten = false;
+    const walk = (n: FTTHNode) => {
+      if (n.type === 'caja_nap') {
+        const s = calculateBoxStatus(simulationData[n.id] ?? []);
+        if (s === 'offline') off = true;
+        if (s === 'warning' || s === 'critical') atten = true;
+      }
+      (n.children ?? []).forEach(walk);
+    };
+    walk(pon.primaryBox);
+    if (off) return 'offline';
+    if (atten) return 'warning';
+    return 'normal';
+  };
   return (
     <aside className="w-80 h-full bg-slate-950 border-r border-slate-800/80 flex flex-col z-20 shadow-2xl select-none flex-shrink-0">
+      <style>{`
+        @keyframes heartbeat { 0%{transform:scale(1);} 14%{transform:scale(1.35);} 28%{transform:scale(1);} 42%{transform:scale(1.35);} 70%{transform:scale(1);} }
+        .heartbeat { animation: heartbeat 1.4s ease-in-out infinite; }
+      `}</style>
+
       {/* Header */}
       <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950">
         <div className="flex items-center gap-2">
@@ -77,7 +101,24 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
 
       {/* Lista de OLTs con bandejas y PONs */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
-        {olts.map((olt) => {
+        {(
+          isSimulationActive && simulationData
+            ? [...olts].sort((a, b) => {
+                const rankOf = (o: OLTDevice) => {
+                  let bestRank = 0;
+                  for (const p of o.ponPorts) {
+                    const h = ponHealth(p);
+                    const r = h === 'offline' ? 2 : h === 'warning' ? 1 : 0;
+                    if (r > bestRank) bestRank = r;
+                  }
+                  return bestRank;
+                };
+                const ra = rankOf(a), rb = rankOf(b);
+                if (ra !== rb) return ra - rb;
+                return a.name.localeCompare(b.name);
+              })
+            : [...olts].sort((a, b) => a.name.localeCompare(b.name))
+        ).map((olt) => {
           const isExpanded = expandedOltIds.includes(olt.id);
           const isOltActive = selectedOltId === olt.id;
 
@@ -85,14 +126,16 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
 
           const oltWorst: BoxSignalStatus = (!isSimulationActive || !simulationData)
             ? 'normal'
-            : olt.ponPorts.reduce<BoxSignalStatus>((worst, pon) => {
-                if (!pon.primaryBox) return worst;
-                const s = calculateParentStatus(pon.primaryBox, simulationData);
-                if (s === 'offline') return 'offline';
-                if (s === 'critical' && worst !== 'offline') return 'critical';
-                if (s === 'warning' && worst !== 'offline' && worst !== 'critical') return 'warning';
-                return worst;
-              }, 'normal');
+            : (() => {
+                let bestRank = 0;
+                let best: 'normal' | 'warning' | 'offline' = 'normal';
+                for (const pon of olt.ponPorts) {
+                  const h = ponHealth(pon);
+                  const r = h === 'offline' ? 2 : h === 'warning' ? 1 : 0;
+                  if (r > bestRank) { bestRank = r; best = h; }
+                }
+                return (best === 'offline' ? 'offline' : best === 'warning' ? 'warning' : 'normal') as BoxSignalStatus;
+              })();
 
           return (
             <div
@@ -117,23 +160,25 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                     )}
                   </span>
                   <div className="truncate">
-                    <span className="text-xs font-bold text-slate-200 block truncate">
-                      {olt.name}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-200 truncate">
+                        {olt.name}
+                      </span>
+                      {oltWorst !== 'normal' && (
+                        <span
+                          className={`text-base font-bold leading-none ${oltWorst === 'offline' ? 'text-red-500' : 'text-orange-400'} heartbeat`}
+                          title={oltWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}
+                        >
+                          !
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                       <span className="font-semibold text-slate-300">{olt.brand}</span>
                       <span>•</span>
                       <span>{olt.model}</span>
                       <span>•</span>
                       <span className="font-mono text-indigo-400">{olt.ponPorts.length} PONs</span>
-  {oltWorst !== 'normal' && (
-    <span
-      className={`text-[13px] font-bold leading-none ${oltWorst === 'offline' ? 'text-red-500' : 'text-orange-400'}`}
-      title={oltWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}
-    >
-      !
-    </span>
-  )}
                     </div>
                   </div>
                 </div>
@@ -217,6 +262,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                             {slotPorts.map((pon: PONPort) => {
                               const isPonSelected = selectedPonId === pon.id;
                               const hasNetwork = Boolean(pon.primaryBox);
+const ponWorst: BoxSignalStatus = ponHealth(pon) as BoxSignalStatus;
 
                               return (
                                 <div
@@ -235,6 +281,9 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                                       }`}
                                     />
                                     <span className="truncate">{pon.name}</span>
+{ponWorst !== 'normal' && (
+  <span className={`text-[11px] font-bold leading-none ${ponWorst === 'offline' ? 'text-red-500' : 'text-orange-400'} heartbeat`} title={ponWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}>!</span>
+)}
                                     <span
                                       className={`text-[9px] font-mono px-1 rounded ${
                                         isPonSelected
@@ -269,6 +318,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                       {olt.ponPorts.map((pon: PONPort) => {
                         const isPonSelected = selectedPonId === pon.id;
                         const hasNetwork = Boolean(pon.primaryBox);
+const ponWorst: BoxSignalStatus = ponHealth(pon) as BoxSignalStatus;
 
                         return (
                           <div
@@ -287,6 +337,9 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                                 }`}
                               />
                               <span className="truncate">{pon.name}</span>
+{ponWorst !== 'normal' && (
+  <span className={`text-[11px] font-bold leading-none ${ponWorst === 'offline' ? 'text-red-500' : 'text-orange-400'} heartbeat`} title={ponWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}>!</span>
+)}
                               <span
                                 className={`text-[9px] font-mono px-1 rounded ${
                                   isPonSelected
