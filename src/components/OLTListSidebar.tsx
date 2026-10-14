@@ -29,8 +29,8 @@ interface OLTListSidebarProps {
   onDeleteOlt: (oltId: string) => void;
   /** True si la simulación de señal está activa (para indicador en el desplegable) */
   isSimulationActive?: boolean;
-  /** Datos de simulación de señal, para marcar OLTs con fallas */
-  simulationData?: SimulationData;
+  /** Mapa de PON id -> datos de simulación (ponSimData global), para marcar OLTs con fallas */
+  ponSimData?: Record<string, SimulationData>;
   /** Contenido del panel de simulación a renderizar dentro del desplegable */
   simulationPanel?: React.ReactNode;
 }
@@ -47,7 +47,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   onAddPonDirect,
   onDeleteOlt,
   isSimulationActive,
-  simulationData,
+  ponSimData,
   simulationPanel,
 }) => {
   const [simOpen, setSimOpen] = useState(false);
@@ -58,12 +58,14 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
 
   // Salta la alerta con una sola caja atenuada/off, no espera a que se caiga el secundario
   const ponHealth = (pon: PONPort): 'normal' | 'warning' | 'offline' => {
-    if (!isSimulationActive || !simulationData || !pon.primaryBox) return 'normal';
+    if (!isSimulationActive || !ponSimData || !pon.primaryBox) return 'normal';
+    const simData = ponSimData[pon.id];
+    if (!simData) return 'normal';
     let off = false;
     let atten = false;
     const walk = (n: FTTHNode) => {
       if (n.type === 'caja_nap') {
-        const s = calculateBoxStatus(simulationData[n.id] ?? []);
+        const s = calculateBoxStatus(simData[n.id] ?? []);
         if (s === 'offline') off = true;
         if (s === 'warning' || s === 'critical') atten = true;
       }
@@ -131,7 +133,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
       {/* Lista de OLTs con bandejas y PONs */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
         {(
-          isSimulationActive && simulationData
+          isSimulationActive && ponSimData
             ? [...filteredOlts].sort((a, b) => {
                 const rankOf = (o: OLTDevice) => {
                   let bestRank = 0;
@@ -153,7 +155,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
 
           const slots = Array.from(new Set(olt.ponPorts.map(p => p.slotIndex || 1))).sort((a, b) => a - b);
 
-          const oltWorst: BoxSignalStatus = (!isSimulationActive || !simulationData)
+          const oltWorst: BoxSignalStatus = (!isSimulationActive || !ponSimData)
             ? 'normal'
             : (() => {
                 let bestRank = 0;

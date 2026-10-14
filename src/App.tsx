@@ -123,10 +123,17 @@ export function App() {
   // ─── Simulación de señal ────────────────────────────────────────────────────
   const [isSimulationActive, setIsSimulationActive] = useState(false);
   const [simulationData, setSimulationData] = useState<SimulationData>({});
+  const [ponSimData, setPonSimData] = useState<Record<string, SimulationData>>({});
   const [simScenario, setSimScenario] = useState<SimulationScenario>('aleatorio');
   const [simScope, setSimScope] = useState<SimulationScope>('mitad');
   const [simTargetSecondaryId, setSimTargetSecondaryId] = useState<string | null>(null);
   const [simFaultTool, setSimFaultTool] = useState<FaultEvent | null>(null);
+  useEffect(() => {
+    if (isSimulationActive && selectedPonId && ponSimData[selectedPonId]) {
+      setSimulationData(ponSimData[selectedPonId]);
+    }
+  }, [selectedPonId, ponSimData, isSimulationActive]);
+
 
   const buildSimulationOptions = (): SimulationOptions => {
     const opts: SimulationOptions = { scenario: simScenario, scope: simScope };
@@ -138,16 +145,32 @@ export function App() {
   };
 
   const applySimulationData = (options: SimulationOptions) => {
-    if (currentPon?.primaryBox) {
-      setSimulationData(generateSimulationData(currentPon.primaryBox, options));
-    }
+    const next: Record<string, SimulationData> = {};
+    olts.forEach(olt => {
+      olt.ponPorts.forEach(p => {
+        if (p.primaryBox) {
+          next[p.id] = generateSimulationData(p.primaryBox, options);
+        }
+      });
+    });
+    setPonSimData(next);
+    const sel = selectedPonId ?? currentPon?.id;
+    if (sel && next[sel]) setSimulationData(next[sel]);
+    else if (currentPon?.id && next[currentPon.id]) setSimulationData(next[currentPon.id]);
+    else setSimulationData({});
   };
 
   const handleToggleSimulation = () => {
-    if (!isSimulationActive && currentPon?.primaryBox) {
-      setSimulationData(generateSimulationData(currentPon.primaryBox, buildSimulationOptions()));
+    if (isSimulationActive) {
+      setIsSimulationActive(false);
+      setPonSimData({});
+      setSimulationData({});
+      return;
     }
-    setIsSimulationActive(v => !v);
+    if (currentPon?.primaryBox) {
+      applySimulationData(buildSimulationOptions());
+      setIsSimulationActive(true);
+    }
   };
 
   const handleRegenerateSimulation = () => {
@@ -190,13 +213,22 @@ export function App() {
     const isPonChip = boxId === currentPon.id;
     const target = isPonChip ? currentPon.primaryBox : findNodeById(currentPon.primaryBox, boxId);
     if (!target) return;
+    const sp = selectedPonId;
+    if (sp) {
+      setPonSimData(prev => ({ ...prev, [sp]: applyFaultToNode(target, simFaultTool, prev[sp] ?? simulationData) }));
+    }
     setSimulationData(prev => applyFaultToNode(target, simFaultTool, prev));
   };
 
   // Selección de caja y barra de ruta de fibra
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>('nap-01');
-  const [breadcrumbSteps, setBreadcrumbSteps] = useState<BreadcrumbStep[]>([
-    { id: 'pri-01', name: 'Caja Primaria 1x4', type: 'caja_primaria', location: 'Cámara Subterránea Mitre' },
+  useEffect(() => {
+    if (isSimulationActive && selectedPonId && ponSimData[selectedPonId]) {
+      setSimulationData(ponSimData[selectedPonId]);
+    }
+  }, [selectedPonId, ponSimData, isSimulationActive]);
+
+  const [breadcrumbSteps, setBreadcrumbSteps] = useState<BreadcrumbStep[]>([    { id: 'pri-01', name: 'Caja Primaria 1x4', type: 'caja_primaria', location: 'Cámara Subterránea Mitre' },
     { id: 'sec-01', name: 'Secundario #1 (1x4)', type: 'caja_secundaria', portUsed: 1, location: 'Poste 12 - Av. San Martín' },
     { id: 'nap-01', name: 'NAP #1 (1x8)', type: 'caja_nap', portUsed: 1, location: 'Poste 14 - Esquina Belgrano' },
   ]);
@@ -499,7 +531,7 @@ export function App() {
           onAddPonDirect={handleAddPonDirect}
           onDeleteOlt={handleDeleteOlt}
           isSimulationActive={isSimulationActive}
-          simulationData={isSimulationActive ? simulationData : undefined}
+          ponSimData={isSimulationActive ? ponSimData : undefined}
           simulationPanel={
             <SimulationPanel
               isActive={isSimulationActive}
