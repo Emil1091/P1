@@ -128,6 +128,31 @@ export function App() {
   const [simScope, setSimScope] = useState<SimulationScope>('mitad');
   const [simTargetSecondaryId, setSimTargetSecondaryId] = useState<string | null>(null);
   const [simFaultTool, setSimFaultTool] = useState<FaultEvent | null>(null);
+
+  useEffect(() => {
+    if (!isSimulationActive) return;
+    setOlts(prev => {
+      const ponRank = (pon: any): number => {
+        const data = ponSimData[pon.id];
+        if (!data || !pon.primaryBox) return 0;
+        let off = false, atten = false;
+        const walk = (n: FTTHNode) => {
+          if (n.type === 'caja_nap') {
+            const c = data[n.id] ?? [];
+            if (c.length > 0 && c.every((x: any) => !x.isOnline)) off = true;
+            else if (c.filter((x:any)=>x.isOnline).some((x:any)=> x.signal <= -25)) atten = true;
+          }
+          (n.children ?? []).forEach(walk);
+        };
+        walk(pon.primaryBox);
+        return off ? 2 : atten ? 1 : 0;
+      };
+      const oltRank = (o: any): number => Math.max(0, ...o.ponPorts.map((p: any) => ponRank(p)));
+      const ordered = [...prev].sort((a, b) => oltRank(b) - oltRank(a) || a.name.localeCompare(b.name));
+      if (ordered.map(o => o.id).join('|') === prev.map(o => o.id).join('|')) return prev;
+      return ordered;
+    });
+  }, [ponSimData, isSimulationActive]);
   useEffect(() => {
     if (isSimulationActive && selectedPonId && ponSimData[selectedPonId]) {
       setSimulationData(ponSimData[selectedPonId]);
