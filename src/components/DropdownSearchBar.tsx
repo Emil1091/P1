@@ -21,7 +21,14 @@ interface DropdownSearchBarProps {
 export const DropdownSearchBar: React.FC<DropdownSearchBarProps> = ({ olts, onSelectResult }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Reiniciar la selección al cambiar la búsqueda o abrir/cerrar
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query, isOpen]);
 
   // Cerrar al hacer clic afuera
   useEffect(() => {
@@ -64,6 +71,47 @@ export const DropdownSearchBar: React.FC<DropdownSearchBarProps> = ({ olts, onSe
     });
   }
 
+  // Navegación por teclado: flechas arriba/abajo + Enter para seleccionar
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (results.length === 0) {
+      if (e.key === 'Escape') setIsOpen(false);
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setIsOpen(true);
+        setActiveIndex(i => (i + 1) % results.length);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setIsOpen(true);
+        setActiveIndex(i => (i - 1 + results.length) % results.length);
+        break;
+      case 'Enter': {
+        e.preventDefault();
+        const item = results[activeIndex] ?? results[0];
+        if (item) {
+          onSelectResult(item);
+          setIsOpen(false);
+        }
+        break;
+      }
+      case 'Escape':
+        setIsOpen(false);
+        break;
+    }
+  };
+
+  // Mantener visible el resultado activo al navegar con teclado
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current
+        .querySelector(`[data-index="${activeIndex}"]`)
+        ?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [activeIndex, results.length]);
+
   return (
     <div ref={containerRef} className="relative select-none">
       {/* Barra de input integrado */}
@@ -73,7 +121,11 @@ export const DropdownSearchBar: React.FC<DropdownSearchBarProps> = ({ olts, onSe
           type="text"
           placeholder="Buscar caja (ej. NAP, poste, calle)..."
           value={query}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            setIsOpen(true);
+            setActiveIndex(0);
+          }}
+          onKeyDown={handleKeyDown}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
@@ -95,20 +147,29 @@ export const DropdownSearchBar: React.FC<DropdownSearchBarProps> = ({ olts, onSe
 
       {/* Menú Flotante Dropdown de Resultados (NO tapa la pantalla) */}
       {isOpen && query.trim().length > 0 && (
-        <div className="absolute left-0 top-full mt-1.5 w-80 max-h-80 overflow-y-auto bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md z-50 divide-y divide-slate-800/50 animate-in fade-in slide-in-from-top-2">
+        <div
+          ref={listRef}
+          className="absolute left-0 top-full mt-1.5 w-80 max-h-80 overflow-y-auto bg-slate-900/95 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md z-50 divide-y divide-slate-800/50 animate-in fade-in slide-in-from-top-2"
+        >
           {results.length === 0 ? (
             <div className="p-3 text-center text-xs text-slate-500">
               No se encontraron cajas con "{query}".
             </div>
           ) : (
-            results.map((item) => (
+            results.map((item, idx) => (
               <div
                 key={item.boxId}
+                data-index={idx}
+                onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => {
                   onSelectResult(item);
                   setIsOpen(false);
                 }}
-                className="p-2.5 hover:bg-slate-800/80 cursor-pointer flex items-center justify-between text-xs transition"
+                className={`p-2.5 cursor-pointer flex items-center justify-between text-xs transition ${
+                  activeIndex === idx
+                    ? 'bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/40'
+                    : 'hover:bg-slate-800/80'
+                }`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <div className="p-1 rounded bg-slate-800 border border-slate-700/60 flex-shrink-0">

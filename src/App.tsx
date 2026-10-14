@@ -5,7 +5,7 @@ import {
   Upload,
   Trash2
 } from 'lucide-react';
-import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort, SimulationData } from './types/ftth';
+import type { OLTDevice, FTTHNode, BreadcrumbStep, PONPort, SimulationData, SimulationScenario, SimulationScope, FaultEvent } from './types/ftth';
 import { OLTListSidebar } from './components/OLTListSidebar';
 import { SynopticTreeCanvas } from './components/SynopticTreeCanvas';
 import { CreateOLTModal } from './components/CreateOLTModal';
@@ -15,7 +15,8 @@ import { HierarchyBreadcrumbBar } from './components/HierarchyBreadcrumbBar';
 import { DropdownSearchBar } from './components/DropdownSearchBar';
 import type { SearchResultItem } from './components/DropdownSearchBar';
 import { SimulationPanel } from './components/SimulationPanel';
-import { generateSimulationData } from './utils/simulation';
+import { generateSimulationData, getSecondaryBoxes, applyFaultToNode, findNodeById } from './utils/simulation';
+import type { SimulationOptions } from './utils/simulation';
 
 const STORAGE_KEY = 'ftth_designer_olts_v2';
 
@@ -122,18 +123,74 @@ export function App() {
   // ─── Simulación de señal ────────────────────────────────────────────────────
   const [isSimulationActive, setIsSimulationActive] = useState(false);
   const [simulationData, setSimulationData] = useState<SimulationData>({});
+  const [simScenario, setSimScenario] = useState<SimulationScenario>('aleatorio');
+  const [simScope, setSimScope] = useState<SimulationScope>('mitad');
+  const [simTargetSecondaryId, setSimTargetSecondaryId] = useState<string | null>(null);
+  const [simFaultTool, setSimFaultTool] = useState<FaultEvent | null>(null);
+
+  const buildSimulationOptions = (): SimulationOptions => {
+    const opts: SimulationOptions = { scenario: simScenario, scope: simScope };
+    if (simScenario === 'secundario_off') {
+      const isValid = secondaryOptions.some(o => o.id === simTargetSecondaryId);
+      opts.targetSecondaryId = isValid ? simTargetSecondaryId ?? undefined : secondaryOptions[0]?.id;
+    }
+    return opts;
+  };
+
+  const applySimulationData = (options: SimulationOptions) => {
+    if (currentPon?.primaryBox) {
+      setSimulationData(generateSimulationData(currentPon.primaryBox, options));
+    }
+  };
 
   const handleToggleSimulation = () => {
     if (!isSimulationActive && currentPon?.primaryBox) {
-      setSimulationData(generateSimulationData(currentPon.primaryBox));
+      setSimulationData(generateSimulationData(currentPon.primaryBox, buildSimulationOptions()));
     }
     setIsSimulationActive(v => !v);
   };
 
   const handleRegenerateSimulation = () => {
-    if (currentPon?.primaryBox) {
-      setSimulationData(generateSimulationData(currentPon.primaryBox));
+    applySimulationData(buildSimulationOptions());
+  };
+
+  const handleChangeScenario = (scenario: SimulationScenario) => {
+    setSimScenario(scenario);
+    if (scenario === 'secundario_off' && secondaryOptions.length > 0 && !simTargetSecondaryId) {
+      setSimTargetSecondaryId(secondaryOptions[0].id);
     }
+    if (isSimulationActive) {
+      const opts: SimulationOptions = { scenario, scope: simScope };
+      if (scenario === 'secundario_off') {
+        opts.targetSecondaryId = (simTargetSecondaryId && secondaryOptions.some(o => o.id === simTargetSecondaryId))
+          ? simTargetSecondaryId
+          : secondaryOptions[0]?.id;
+      }
+      applySimulationData(opts);
+    }
+  };
+
+  const handleChangeScope = (scope: SimulationScope) => {
+    setSimScope(scope);
+    if (isSimulationActive) {
+      applySimulationData({ scenario: simScenario, scope, targetSecondaryId: simTargetSecondaryId ?? undefined });
+    }
+  };
+
+  const handleChangeTargetSecondary = (id: string) => {
+    setSimTargetSecondaryId(id);
+    if (isSimulationActive) {
+      applySimulationData({ scenario: simScenario, scope: simScope, targetSecondaryId: id });
+    }
+  };
+
+  // Herramienta manual: aplicar falla a la caja clickeada en el canvas
+  const handleApplyFault = (boxId: string) => {
+    if (!simFaultTool || !currentPon?.primaryBox) return;
+    const isPonChip = boxId === currentPon.id;
+    const target = isPonChip ? currentPon.primaryBox : findNodeById(currentPon.primaryBox, boxId);
+    if (!target) return;
+    setSimulationData(prev => applyFaultToNode(target, simFaultTool, prev));
   };
 
   // Selección de caja y barra de ruta de fibra
@@ -154,6 +211,7 @@ export function App() {
 
   const currentOlt = olts.find(o => o.id === selectedOltId) || olts[0];
   const currentPon = currentOlt?.ponPorts.find(p => p.id === selectedPonId) || currentOlt?.ponPorts[0];
+  const secondaryOptions = getSecondaryBoxes(currentPon?.primaryBox);
 
   const handleToggleExpandOlt = (oltId: string) => {
     setExpandedOltIds(prev =>
@@ -440,6 +498,27 @@ export function App() {
           onOpenEditOltModal={(olt) => setEditingOlt(olt)}
           onAddPonDirect={handleAddPonDirect}
           onDeleteOlt={handleDeleteOlt}
+          isSimulationActive={isSimulationActive}
+          simulationData={isSimulationActive ? simulationData : undefined}
+          simulationPanel={
+            <SimulationPanel
+              isActive={isSimulationActive}
+              onToggle={handleToggleSimulation}
+              onRegenerate={handleRegenerateSimulation}
+              simData={simulationData}
+              selectedBoxId={selectedBoxId}
+              selectedBoxName={breadcrumbSteps[breadcrumbSteps.length - 1]?.name}
+              scenario={simScenario}
+              scope={simScope}
+              targetSecondaryId={simTargetSecondaryId}
+              secondaryOptions={secondaryOptions}
+              onScenarioChange={handleChangeScenario}
+              onScopeChange={handleChangeScope}
+              onTargetSecondaryChange={handleChangeTargetSecondary}
+              faultTool={simFaultTool}
+              onFaultToolChange={setSimFaultTool}
+            />
+          }
         />
 
         <main className="flex-1 relative overflow-hidden bg-[#0b0f19] flex flex-col p-4 gap-3">
@@ -450,16 +529,6 @@ export function App() {
                 ponName={currentPon.name}
                 slotPort={currentPon.slotPort}
                 steps={breadcrumbSteps}
-              />
-
-              {/* Panel de simulación de señal */}
-              <SimulationPanel
-                isActive={isSimulationActive}
-                onToggle={handleToggleSimulation}
-                onRegenerate={handleRegenerateSimulation}
-                simData={simulationData}
-                selectedBoxId={selectedBoxId}
-                selectedBoxName={breadcrumbSteps[breadcrumbSteps.length - 1]?.name}
               />
 
               <div className="flex-1 relative overflow-hidden rounded-xl border border-slate-800/60 bg-[#0b0f19]/80">
@@ -474,6 +543,8 @@ export function App() {
                   onUpdatePrimaryBox={handleUpdatePrimaryBox}
                   onOpenEditBoxModal={(node) => setEditingNode(node)}
                   simulationData={isSimulationActive ? simulationData : undefined}
+                  faultTool={isSimulationActive ? simFaultTool : null}
+                  onApplyFault={isSimulationActive ? handleApplyFault : undefined}
                 />
               </div>
             </>

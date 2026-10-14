@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Server,
   Zap,
@@ -8,9 +8,11 @@ import {
   Layers,
   Cpu,
   Trash2,
-  Edit2
+  Edit2,
+  Activity
 } from 'lucide-react';
-import type { OLTDevice, PONPort } from '../types/ftth';
+import type { OLTDevice, PONPort, BoxSignalStatus, SimulationData } from '../types/ftth';
+import { calculateParentStatus } from '../utils/simulation';
 
 interface OLTListSidebarProps {
   olts: OLTDevice[];
@@ -23,6 +25,12 @@ interface OLTListSidebarProps {
   onOpenEditOltModal: (olt: OLTDevice) => void;
   onAddPonDirect: (oltId: string, slotIndex?: number) => void;
   onDeleteOlt: (oltId: string) => void;
+  /** True si la simulación de señal está activa (para indicador en el desplegable) */
+  isSimulationActive?: boolean;
+  /** Datos de simulación de señal, para marcar OLTs con fallas */
+  simulationData?: SimulationData;
+  /** Contenido del panel de simulación a renderizar dentro del desplegable */
+  simulationPanel?: React.ReactNode;
 }
 
 export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
@@ -36,7 +44,11 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   onOpenEditOltModal,
   onAddPonDirect,
   onDeleteOlt,
+  isSimulationActive,
+  simulationData,
+  simulationPanel,
 }) => {
+  const [simOpen, setSimOpen] = useState(false);
   return (
     <aside className="w-80 h-full bg-slate-950 border-r border-slate-800/80 flex flex-col z-20 shadow-2xl select-none flex-shrink-0">
       {/* Header */}
@@ -71,6 +83,17 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
 
           const slots = Array.from(new Set(olt.ponPorts.map(p => p.slotIndex || 1))).sort((a, b) => a - b);
 
+          const oltWorst: BoxSignalStatus = (!isSimulationActive || !simulationData)
+            ? 'normal'
+            : olt.ponPorts.reduce<BoxSignalStatus>((worst, pon) => {
+                if (!pon.primaryBox) return worst;
+                const s = calculateParentStatus(pon.primaryBox, simulationData);
+                if (s === 'offline') return 'offline';
+                if (s === 'critical' && worst !== 'offline') return 'critical';
+                if (s === 'warning' && worst !== 'offline' && worst !== 'critical') return 'warning';
+                return worst;
+              }, 'normal');
+
           return (
             <div
               key={olt.id}
@@ -103,6 +126,14 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                       <span>{olt.model}</span>
                       <span>•</span>
                       <span className="font-mono text-indigo-400">{olt.ponPorts.length} PONs</span>
+  {oltWorst !== 'normal' && (
+    <span
+      className={`text-[13px] font-bold leading-none ${oltWorst === 'offline' ? 'text-red-500' : 'text-orange-400'}`}
+      title={oltWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}
+    >
+      !
+    </span>
+  )}
                     </div>
                   </div>
                 </div>
@@ -290,8 +321,40 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
         })}
       </div>
 
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950 text-[10px] text-slate-500 text-center">
-        Haz clic en cualquier puerto PON para ver su cuadro de llaves.
+      {/* Simulación de señal (desplegable) */}
+      <div className="border-t border-slate-800/80 bg-slate-950 flex-shrink-0 select-none">
+        <button
+          onClick={() => setSimOpen(v => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-900/70 active:bg-slate-900 transition"
+          title={simOpen ? 'Ocultar panel de simulación' : 'Mostrar panel de simulación'}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">
+              {simOpen ? (
+                <ChevronDown className="w-4 h-4 text-indigo-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </span>
+            <span className={`p-1 rounded ${isSimulationActive ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+              <Activity className="w-3.5 h-3.5" />
+            </span>
+            <span className="text-xs font-bold text-slate-200">Simulación de Señal</span>
+            {isSimulationActive && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                <span className="text-[9px] text-indigo-300 font-semibold">ACTIVA</span>
+              </span>
+            )}
+          </div>
+          <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${simOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {simOpen && (
+          <div className="px-2.5 pb-3 pt-0.5 max-h-[26rem] overflow-y-auto">
+            {simulationPanel}
+          </div>
+        )}
       </div>
     </aside>
   );

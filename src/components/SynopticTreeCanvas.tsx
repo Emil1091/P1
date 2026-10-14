@@ -12,7 +12,7 @@ import {
   Edit2,
   MapPin
 } from 'lucide-react';
-import type { FTTHNode, PONPort, SplitterRatio, BreadcrumbStep, SimulationData } from '../types/ftth';
+import type { FTTHNode, PONPort, SplitterRatio, BreadcrumbStep, SimulationData, FaultEvent } from '../types/ftth';
 import { calculateBoxStatus, calculateParentStatus, STATUS_COLORS, averageSignal } from '../utils/simulation';
 import { CurlyBracket } from './CurlyBracket';
 
@@ -25,7 +25,16 @@ interface SynopticTreeCanvasProps {
   onOpenEditBoxModal: (node: FTTHNode) => void;
   /** Datos de simulación de señal. Si undefined, la simulación está inactiva. */
   simulationData?: SimulationData;
+  /** Herramienta de falla manual: si está activa, un clic sobre una caja la aplica */
+  faultTool?: FaultEvent | null;
+  onApplyFault?: (nodeId: string) => void;
 }
+
+const FAULT_TOOL_LABELS: Record<FaultEvent, string> = {
+  off: 'Apagar (Off)',
+  atenuacion: 'Atenuar',
+  normal: 'Restaurar',
+};
 
 export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   pon,
@@ -35,8 +44,11 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
   onUpdatePrimaryBox,
   onOpenEditBoxModal,
   simulationData,
+  faultTool,
+  onApplyFault,
 }) => {
   const primaryBox = pon.primaryBox;
+  const faultActive = !!faultTool && !!onApplyFault;
 
   const primaryBracketRef = useRef<HTMLDivElement>(null);
   const selectedNodeRef = useRef<HTMLDivElement>(null);
@@ -224,11 +236,32 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
         )}
       </div>
 
+      {/* Aviso de herramienta de falla activa */}
+      {faultActive && (
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-950/20 text-[11px] text-amber-200">
+          <span className="font-bold uppercase tracking-wider flex-shrink-0">
+            Modo {FAULT_TOOL_LABELS[faultTool!]}
+          </span>
+          <span className="text-amber-200/70">
+            — hacé clic sobre cualquier caja (PON, primaria, secundaria o NAP) para aplicarlo
+          </span>
+          <span className="ml-auto text-amber-300/50 text-[10px]">clic mantiene la selección</span>
+        </div>
+      )}
+
       {/* ÁRBOL DE LLAVES SINÓPTICO */}
       <div className="flex items-center gap-1 min-w-max py-4">
         {/* NIVEL 1: NODO PON */}
         <div className="flex items-center gap-2">
-          <div className="px-3 py-2 rounded-xl bg-slate-900 border border-amber-500/50 shadow-md flex items-center gap-2">
+          <div
+            onClick={faultActive ? () => onApplyFault!(pon.id) : undefined}
+            className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 ${
+              faultActive
+                ? 'border-amber-400/80 cursor-crosshair ring-1 ring-amber-400/30 hover:ring-2 transition'
+                : 'border-amber-500/50'
+            }`}
+            title={faultActive ? 'Aplicar falla a todo el PON' : pon.slotPort}
+          >
             <Zap className="w-4 h-4 text-amber-400 flex-shrink-0" />
             <div className="text-left">
               <span className="text-xs font-bold text-slate-100 block">{pon.name}</span>
@@ -287,16 +320,21 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
             <div
               ref={selectedBoxId === primaryBox.id ? selectedNodeRef : undefined}
               onClick={() => {
+                if (faultActive) onApplyFault!(primaryBox.id);
                 onSelectBox(primaryBox.id, [
                   { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, location: primaryBox.location }
                 ]);
               }}
-              className={`px-3 py-2 rounded-xl bg-slate-900 border shadow-md flex items-center gap-2 cursor-pointer transition-all duration-200 ${
+              className={`px-3 py-2 rounded-xl border shadow-md flex items-center gap-2 cursor-pointer transition-all duration-200 ${
+                faultActive
+                  ? 'cursor-crosshair ring-1 ring-amber-400/40 hover:ring-2 hover:ring-amber-400/60'
+                  : ''
+              } ${
                 selectedBoxId === primaryBox.id
-                  ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
+                  ? 'bg-slate-900 border-white ring-4 ring-white/40 scale-105'
                   : priSim && priSim.status !== 'normal'
                   ? `${priSim.cfg.border} ${priSim.cfg.bg}`
-                  : 'border-indigo-500/40 hover:border-indigo-400'
+                  : 'bg-slate-900 border-indigo-500/40 hover:border-indigo-400'
               }`}
             >
               <button
@@ -384,17 +422,22 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                             <div
                               ref={selectedBoxId === secNode.id ? selectedNodeRef : undefined}
                               onClick={() => {
+                                if (faultActive) onApplyFault!(secNode.id);
                                 onSelectBox(secNode.id, [
                                   { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
                                   { id: secNode.id, name: secNode.name, type: secNode.type, location: secNode.location }
                                 ]);
                               }}
-                              className={`px-2.5 py-1.5 rounded-lg bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
+                              className={`px-2.5 py-1.5 rounded-lg border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
+                                faultActive
+                                  ? 'cursor-crosshair ring-1 ring-amber-400/40 hover:ring-2 hover:ring-amber-400/60'
+                                  : ''
+                              } ${
                                 selectedBoxId === secNode.id
-                                  ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
+                                  ? 'bg-slate-900 border-white ring-4 ring-white/40 scale-105'
                                   : secSimCfg && secStatus !== 'normal'
                                   ? `${secSimCfg.border} ${secSimCfg.bg}`
-                                  : 'border-sky-500/40 hover:border-sky-400'
+                                  : 'bg-slate-900 border-sky-500/40 hover:border-sky-400'
                               }`}
                             >
                               <button
@@ -486,18 +529,23 @@ export const SynopticTreeCanvas: React.FC<SynopticTreeCanvasProps> = ({
                                           <div
                                             ref={selectedBoxId === napNode.id ? selectedNodeRef : undefined}
                                             onClick={() => {
+                                              if (faultActive) onApplyFault!(napNode.id);
                                               onSelectBox(napNode.id, [
                                                 { id: primaryBox.id, name: primaryBox.name, type: primaryBox.type, portUsed: portNum, location: primaryBox.location },
                                                 { id: secNode.id, name: secNode.name, type: secNode.type, portUsed: napPortNum, location: secNode.location },
                                                 { id: napNode.id, name: napNode.name, type: napNode.type, location: napNode.location }
                                               ]);
                                             }}
-                                            className={`px-2 py-1 rounded-md bg-slate-900 border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
+                                            className={`px-2 py-1 rounded-md border shadow-sm flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
+                                              faultActive
+                                                ? 'cursor-crosshair ring-1 ring-amber-400/40 hover:ring-2 hover:ring-amber-400/60'
+                                                : ''
+                                            } ${
                                               selectedBoxId === napNode.id
-                                                ? 'border-amber-400 ring-4 ring-amber-400/40 bg-amber-950/40 shadow-xl shadow-amber-500/20 scale-105'
+                                                ? 'bg-slate-900 border-white ring-4 ring-white/40 scale-105'
                                                 : napSimCfg && napStatus !== 'normal'
                                                 ? `${napSimCfg.border} ${napSimCfg.bg}`
-                                                : 'border-emerald-500/40 hover:border-emerald-400'
+                                                : 'bg-slate-900 border-emerald-500/40 hover:border-emerald-400'
                                             }`}
                                           >
                                             <Radio className={`w-3 h-3 flex-shrink-0 ${napSimCfg ? napSimCfg.dot.replace('bg-', 'text-') : 'text-emerald-400'}`} />
