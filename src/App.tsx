@@ -357,8 +357,28 @@ export function App() {
     );
   };
 
+  const collectBoxNames = (node: FTTHNode | undefined, excludeId?: string) => {
+    if (!node) return [] as string[];
+    const out: string[] = [];
+    const walk = (n: FTTHNode) => {
+      if (n.id !== excludeId && n.name) out.push(n.name);
+      (n.children || []).forEach(walk);
+    };
+    walk(node);
+    return out;
+  };
+
   const handleSaveEditedBox = (updatedFields: Partial<FTTHNode>) => {
     if (!editingNode || !currentPon?.primaryBox) return;
+
+    if (updatedFields.name) {
+      const trimmed = String(updatedFields.name).trim().toLowerCase();
+      const others = collectBoxNames(currentPon.primaryBox, editingNode.id).map(n => n.trim().toLowerCase());
+      if (others.indexOf(trimmed) !== -1) {
+        alert('Ya existe otra caja con ese nombre. Elegí uno distinto.');
+        return;
+      }
+    }
 
     const updateRecursively = (node: FTTHNode): FTTHNode => {
       if (node.id === editingNode.id) {
@@ -633,6 +653,7 @@ export function App() {
           node={editingNode}
           onClose={() => setEditingNode(null)}
           onSave={handleSaveEditedBox}
+          existingBoxNames={collectBoxNames(currentPon?.primaryBox, editingNode?.id)}
         />
       )}
     </div>

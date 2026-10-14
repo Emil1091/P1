@@ -6,9 +6,13 @@ interface EditBoxModalProps {
   node: FTTHNode;
   onClose: () => void;
   onSave: (updated: Partial<FTTHNode>) => void;
+  existingBoxNames?: string[];
 }
 
-export const EditBoxModal: React.FC<EditBoxModalProps> = ({ node, onClose, onSave }) => {
+export const EditBoxModal: React.FC<EditBoxModalProps> = ({ node, onClose, onSave, existingBoxNames = [] }) => {
+  const existingLower = existingBoxNames.map(n => String(n).trim().toLowerCase()).filter(Boolean);
+  const nameTaken = (val: string) => existingLower.indexOf(val.trim().toLowerCase()) !== -1;
+  const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(node.name);
   const [location, setLocation] = useState(node.location || '');
   const [notes, setNotes] = useState(node.notes || '');
@@ -16,8 +20,14 @@ export const EditBoxModal: React.FC<EditBoxModalProps> = ({ node, onClose, onSav
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const candidate = (name.trim() || node.name).trim();
+    if (nameTaken(candidate)) {
+      setError('Ya existe otra caja con ese nombre. Elegí uno distinto.');
+      return;
+    }
+    setError(null);
     onSave({
-      name: name.trim() || node.name,
+      name: candidate,
       location: location.trim(),
       notes: notes.trim(),
       ratio,
@@ -62,9 +72,12 @@ export const EditBoxModal: React.FC<EditBoxModalProps> = ({ node, onClose, onSav
               type="text"
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setError(null); }}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
             />
+            {error && (
+              <p className="mt-1 text-[11px] text-red-400 font-medium">{error}</p>
+            )}
           </div>
 
           <div>
