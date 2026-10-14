@@ -80,8 +80,8 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   return (
     <aside className="w-80 h-full bg-slate-950 border-r border-slate-800/80 flex flex-col z-20 shadow-2xl select-none flex-shrink-0">
       <style>{`
-        @keyframes heartbeat { 0%{transform:scale(1);} 14%{transform:scale(1.35);} 28%{transform:scale(1);} 42%{transform:scale(1.35);} 70%{transform:scale(1);} }
-        .heartbeat { animation: heartbeat 1.4s ease-in-out infinite; }
+        @keyframes heartbeat { 0%{transform:scale(1);} 16%{transform:scale(1.12);} 32%{transform:scale(1);} }
+        .heartbeat { animation: heartbeat 2.6s ease-in-out infinite; }
       `}</style>
 
       {/* Header */}
@@ -95,6 +95,16 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
               Cabeceras OLT
             </h2>
             <p className="text-[10px] text-slate-500">{olts.length} equipos registrados</p>
+            {isSimulationActive && ponSimData && (
+              <p className="text-[9px] text-slate-400 mt-0.5">
+                Ordenadas por señal:{' '}
+                <span className="text-red-400 font-bold">off</span>
+                {' → '}
+                <span className="text-orange-400 font-bold">atenuadas</span>
+                {' → '}
+                <span className="text-slate-300">nombre</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -197,19 +207,10 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                         {olt.name}
                       </span>
                       {oltWorst !== 'normal' && (
-                        oltWorst === 'offline' ? (
-                          <span
-                            className="inline-flex items-center justify-center w-4 h-4 rounded-md bg-red-600 text-white heartbeat"
-                            title="Hay cajas sin señal (off)"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </span>
-                        ) : (
                           <AlertTriangle
-                            className="w-4 h-4 text-amber-400 heartbeat"
-                                                      />
-                        )
-                      )}
+                            className={`w-4 h-4 ml-1 heartbeat ${oltWorst === 'offline' ? 'text-red-500' : 'text-amber-400'}`}
+                          />
+                        )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                       <span className="font-semibold text-slate-300">{olt.brand}</span>
@@ -319,15 +320,9 @@ const ponWorst: BoxSignalStatus = ponHealth(pon) as BoxSignalStatus;
                                       }`}
                                     />
                                     <span className="truncate">{pon.name}</span>
-{ponWorst !== 'normal' && (
-  ponWorst === 'offline' ? (
-    <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-md bg-red-600 text-white heartbeat ml-1" title="Hay cajas sin señal (off)">
-      <X className="w-2.5 h-2.5" />
-    </span>
-  ) : (
-    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 heartbeat ml-1"  />
-  )
-)}
+                                    {ponWorst !== 'normal' && (
+                                      <AlertTriangle className={`w-3.5 h-3.5 ml-1 heartbeat ${ponWorst === 'offline' ? 'text-red-500' : 'text-amber-400'}`} />
+                                    )}
                                     <span
                                       className={`text-[9px] font-mono px-1 rounded ${
                                         isPonSelected
@@ -381,9 +376,9 @@ const ponWorst: BoxSignalStatus = ponHealth(pon) as BoxSignalStatus;
                                 }`}
                               />
                               <span className="truncate">{pon.name}</span>
-{ponWorst !== 'normal' && (
-  <span className={`text-[11px] font-bold leading-none ${ponWorst === 'offline' ? 'text-red-500' : 'text-orange-400'} heartbeat`} title={ponWorst === 'offline' ? 'Hay cajas sin señal (off)' : 'Hay cajas atenuadas'}>!</span>
-)}
+                                    {ponWorst !== 'normal' && (
+                                      <AlertTriangle className={`w-3.5 h-3.5 ml-1 heartbeat ${ponWorst === 'offline' ? 'text-red-500' : 'text-amber-400'}`} />
+                                    )}
                               <span
                                 className={`text-[9px] font-mono px-1 rounded ${
                                   isPonSelected
