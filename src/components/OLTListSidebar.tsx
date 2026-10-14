@@ -9,7 +9,9 @@ import {
   Cpu,
   Trash2,
   Edit2,
-  Activity
+  Activity,
+  Search,
+  X
 } from 'lucide-react';
 import type { OLTDevice, PONPort, BoxSignalStatus, SimulationData, FTTHNode } from '../types/ftth';
 import { calculateBoxStatus } from '../utils/simulation';
@@ -49,6 +51,10 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
   simulationPanel,
 }) => {
   const [simOpen, setSimOpen] = useState(false);
+  const [oltFilterQuery, setOltFilterQuery] = useState('');
+  const filteredOlts = oltFilterQuery.trim()
+    ? olts.filter(o => (o.name + ' ' + o.brand + ' ' + o.model).toLowerCase().includes(oltFilterQuery.trim().toLowerCase()))
+    : olts;
 
   // Salta la alerta con una sola caja atenuada/off, no espera a que se caiga el secundario
   const ponHealth = (pon: PONPort): 'normal' | 'warning' | 'offline' => {
@@ -99,11 +105,34 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
         </button>
       </div>
 
+      {/* Filtro / buscador de OLTs */}
+      <div className="px-2.5 pt-2 pb-1">
+        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:border-slate-700 focus-within:border-indigo-500 rounded-lg px-2.5 py-1 text-xs transition">
+          <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+          <input
+            type="text"
+            placeholder="Buscar OLT (nombre, marca, modelo)..."
+            value={oltFilterQuery}
+            onChange={(e) => setOltFilterQuery(e.target.value)}
+            className="w-full bg-transparent text-slate-200 placeholder:text-slate-500 focus:outline-none text-xs"
+          />
+          {oltFilterQuery && (
+            <button
+              onClick={() => setOltFilterQuery('')}
+              className="text-slate-500 hover:text-white"
+              title="Limpiar filtro"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Lista de OLTs con bandejas y PONs */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
         {(
           isSimulationActive && simulationData
-            ? [...olts].sort((a, b) => {
+            ? [...filteredOlts].sort((a, b) => {
                 const rankOf = (o: OLTDevice) => {
                   let bestRank = 0;
                   for (const p of o.ponPorts) {
@@ -117,7 +146,7 @@ export const OLTListSidebar: React.FC<OLTListSidebarProps> = ({
                 if (ra !== rb) return ra - rb;
                 return a.name.localeCompare(b.name);
               })
-            : [...olts].sort((a, b) => a.name.localeCompare(b.name))
+            : [...filteredOlts].sort((a, b) => a.name.localeCompare(b.name))
         ).map((olt) => {
           const isExpanded = expandedOltIds.includes(olt.id);
           const isOltActive = selectedOltId === olt.id;
